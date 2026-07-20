@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -33,28 +32,11 @@ class ValueHolder(tfp.experimental.AutoCompositeTensor):
         self._varmap = varmap
         self._vararg = self._create_vararg_map(args, varmap)
 
-        # needed to create auto composite
         self.norm = norm
         self.holders = holders
         self.variables = variables
         self.args = args
 
-    def get_var(self, name):
-        if name not in self._varmap:
-            msg = f"{name} is not a valid name. Has to be one of {tuple(self._varmap.keys())}"
-            raise ValueError(msg)
-        varname = self._varmap["name"]
-        for arg in self.args:
-            if isinstance(arg, ZfitVar):
-                if varname == arg.name:
-                    return arg
-            elif isinstance(arg, ZfitData):
-                if varname in arg.obs:
-                    return arg[varname]
-            else:
-                msg = "We missed something somewhere. Please report this, it's a bug."
-                raise AssertionError(msg)
-        return None
 
     def _check_input_variables(self, variables):
         if not isinstance(variables, collections.abc.Mapping):
@@ -78,14 +60,5 @@ class ValueHolder(tfp.experimental.AutoCompositeTensor):
     def __contains__(self, item):
         return item in self.names
 
-    @property
-    def params(self) -> dict[str, ZfitParameter]:
-        return {k: v for k, v in zip(self.names, self.args, strict=True) if isinstance(v, ZfitParameter)}
 
-    @property
-    def space(self) -> dict[str, ZfitSpace]:
-        return {k: v for k, v in zip(self.names, self.args, strict=True) if isinstance(v, ZfitSpace)}
 
-    @property
-    def datasets(self) -> dict[str, ZfitData]:
-        return {k: v for k, v in zip(self.names, self.args, strict=True) if isinstance(v, ZfitData)}

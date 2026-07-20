@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -19,7 +18,6 @@ if typing.TYPE_CHECKING:
 
 @z.function(wraps="tensor", keepalive=True)
 def calc_f(s, f, squared_integers, grid_data_dct2, N):
-    # Step one: estimate t_s from |f^(s+1)|^2
     one_half = tf.constant(1.0 / 2.0, ztypes.float)
     one = tf.constant(1.0, ztypes.float)
     two = tf.constant(2.0, ztypes.float)
@@ -31,7 +29,6 @@ def calc_f(s, f, squared_integers, grid_data_dct2, N):
     const = (one + znp.power(one_half, s + one_half)) / three
     time = znp.power(two * const * K0 / (N * f), two / (three + two * s))
 
-    # Step two: estimate |f^s| from t_s
     return (
         one_half
         * znp.power(pi, (two * s))
@@ -71,10 +68,8 @@ def _fixed_point(t, N, squared_integers, grid_data_dct2):
      - Implementation by Daniel B. Smith, PhD, found at
        https://github.com/Daniel-B-Smith/KDE-for-SciPy/blob/master/kde.py
     """
-    # ell = 7 corresponds to the 5 steps recommended in the paper
     ell = tf.constant(7, ztypes.float)
 
-    # Fast evaluation of |f^l|^2 using the DCT, see Plancherel theorem
     f = (
         tf.constant(0.5, ztypes.float)
         * znp.power(tf.constant(np.pi, ztypes.float), (tf.constant(2.0, ztypes.float) * ell))
@@ -89,26 +84,15 @@ def _fixed_point(t, N, squared_integers, grid_data_dct2):
 
     i = tf.constant(6.0, dtype=ztypes.float)
 
-    def while_condition(i, f):
-        del f  # unused
-        return i > 1
 
-    def body(i, f):
-        # do something here which you want to do in your loop
-        # increment i
-        f = calc_f(i, f, squared_integers, grid_data_dct2, N)
-        return i - 1.0, f
 
-    # do the loop:
     fnew = tf.while_loop(while_condition, body, (i, f), maximum_iterations=5, parallel_iterations=5)[1]
 
-    # This is the minimizer of the AMISE
     t_opt = znp.power(
         tf.constant(2 * np.sqrt(np.pi), ztypes.float) * N * fnew,
         tf.constant(-2.0 / 5.0, ztypes.float),
     )
 
-    # Return the difference between the original t and the optimal value
     return t - t_opt
 
 
@@ -122,8 +106,6 @@ def _find_root(function, N, squared_integers, grid_data_dct2):
     True
     """
     del function
-    # From the implementation by Botev, the original paper author
-    # Rule of thumb of obtaining a feasible solution
     N2 = znp.maximum(
         znp.minimum(tf.constant(1050, ztypes.float), N),
         tf.constant(50, ztypes.float),
@@ -137,65 +119,37 @@ def _find_root(function, N, squared_integers, grid_data_dct2):
     converged = tf.constant(False)
     t_star = tf.constant(0.0, dtype=ztypes.float)
 
-    def fixed_point_function(t):
-        return _fixed_point(t, N, squared_integers, grid_data_dct2)
 
-    def condition(right_bracket, converged, t_star):
-        del right_bracket, t_star
-        return tf.math.logical_not(converged)
 
-    def body(right_bracket, converged, t_star):
-        del converged, t_star
-        t_star, value_at_t_star, _num_iterations, converged = root_search.brentq(
-            fixed_point_function, left_bracket, right_bracket, None, None, 2e-12
-        )
 
-        t_star = t_star - value_at_t_star
-
-        right_bracket = right_bracket * tf.constant(2.0, ztypes.float)
-
-        return right_bracket, converged, t_star
-
-    # While a solution is not found, increase the tolerance and try again
     right_bracket, converged, t_star = tf.while_loop(condition, body, [right_bracket, converged, t_star])
 
     return t_star
 
 
 def _calculate_t_star(data, num_grid_points, binning_method, weights):
-    # Setting `percentile` higher decreases the chance of overflow
     grid = binning_util.generate_1d_grid(data, num_grid_points, 6.0, 0.5)
 
-    # Create an equidistant grid
     R = znp.asarray(znp.max(data) - znp.min(data), ztypes.float)
 
-    # dx = R / tf.constant((num_grid_points - 1), ztypes.float)
     data_unique, _data_unique_indexes = tf.unique(data)
     N = znp.asarray(znp.size(data_unique), ztypes.float)
 
-    # Use linear binning to bin the data on an equidistant grid, this is a
-    # prerequisite for using the FFT (evenly spaced samples)
     grid_data = binning_util.bin_1d(binning_method, data, grid, weights)
 
-    # Compute the type 2 Discrete Cosine Transform (DCT) of the data
     grid_data_dct = tf.signal.dct(grid_data, type=2)
 
-    # Compute the bandwidth
     squared_integers = znp.power(tf.range(1, num_grid_points, dtype=ztypes.float), tf.constant(2, ztypes.float))
     grid_data_dct2 = znp.power(grid_data_dct[1:], 2) / 4
 
-    # Solve for the optimal (in the AMISE sense) t
     t_star = _find_root(_fixed_point, N, squared_integers, grid_data_dct2)
 
     return t_star, R, squared_integers, grid_data_dct, grid
 
 
 def _calculate_density(t_star, R, squared_integers, grid_data_dct):
-    # Prepend zero
     squared_integers = tf.pad(squared_integers, [[1, 0]])
 
-    # Smooth the initial data using the computed optimal t
-    # Multiplication in frequency domain is convolution
     grid_data_dct_t = grid_data_dct * znp.exp(
         -squared_integers
         * znp.power(tf.constant(np.pi, ztypes.float), tf.constant(2.0, ztypes.float))
@@ -203,21 +157,11 @@ def _calculate_density(t_star, R, squared_integers, grid_data_dct):
         / tf.constant(2.0, ztypes.float)
     )
 
-    # Diving by 2 done because of the implementation of tf.signal.idct
     density = tf.signal.idct(grid_data_dct_t, type=2) / (2 * R)
 
-    # Due to overflow, some values might be smaller than zero, correct it
     return znp.asarray(density > 0, density.dtype) * density
 
 
-def calculate_bandwidth(data, num_grid_points=1024, binning_method="linear", weights=None):
-    data = znp.asarray(data, ztypes.float)
-
-    t_star, R, _squared_integers, _grid_data_dct, _grid = _calculate_t_star(
-        data, num_grid_points, binning_method, weights
-    )
-
-    return znp.sqrt(t_star) * R
 
 
 def calculate_bandwidth_and_density(data, num_grid_points=1024, binning_method="linear", weights=None):

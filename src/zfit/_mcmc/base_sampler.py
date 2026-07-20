@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -17,11 +16,6 @@ if TYPE_CHECKING:
 
 
 class BaseMCMCSampler(ZfitSampler):
-    """Base class for MCMC samplers in zfit.
-
-    This abstract base class provides common functionality for all MCMC samplers,
-    including verbosity control and utility methods.
-    """
 
     def __init__(
         self,
@@ -127,22 +121,18 @@ class BaseMCMCSampler(ZfitSampler):
             - Consider using larger n_warmup for difficult posteriors
             - When using init, ensure the parameters match between runs
         """
-        # Import here to avoid circular imports
         from .._interfaces import ZfitLoss  # noqa: PLC0415
 
-        # Validate inputs
         if not isinstance(loss, ZfitLoss):
             msg = f"loss must be a ZfitLoss instance, not {type(loss)}"
             raise TypeError(msg)
 
-        # Handle default n_samples
         if n_samples is None:
             n_samples = self._default_n_samples
 
         if n_warmup is None:
             n_warmup = self._default_n_warmup if init is None else 0
 
-        # Get and validate parameters
         if params is None:
             params = loss.get_params(floating=True)
         else:
@@ -153,12 +143,10 @@ class BaseMCMCSampler(ZfitSampler):
 
         params = list(params)
 
-        # Check that all parameters have priors
         if noprior := [p for p in params if p.prior is None]:
             msg = f"Parameters {noprior} do not have priors defined"
             raise ValueError(msg)
 
-        # Delegate to concrete implementation
         return self._sample(loss=loss, params=params, n_samples=n_samples, n_warmup=n_warmup, init=init)
 
     def _sample(

@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -115,12 +114,6 @@ class SplineMorphingPDF(BaseBinnedPDF):
                 raise ValueError(msg)
             alphas = znp.array(list(self.hists.keys()), dtype=znp.float64)
 
-            def interpolated_yield(params):
-                alpha = params["alpha"]
-                densities = tuple(
-                    params[f"{i}"] for i in range(len(params) - 1)
-                )  # params has n hist entries + 1 alpha entry
-                return spline_interpolator(alpha=alpha, alphas=alphas, densities=densities)
 
             number = parameter.get_auto_number()
             yields = {f"{i}": hist.get_yield() for i, hist in enumerate(hists.values())}

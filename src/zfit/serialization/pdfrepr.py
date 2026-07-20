@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -18,16 +17,8 @@ class BasePDFRepr(BaseRepr):
     _owndict = pydantic.PrivateAttr(default_factory=dict)
     hs3_type: Literal["BasePDF"] = Field("BasePDF", alias="type")
     extended: bool | None | Serializer.types.ParamTypeDiscriminated = None
-    # TODO: add norm?
     name: str | None = None
 
-    @root_validator(pre=True)
-    def convert_params(cls, values):
-        if cls.orm_mode(values):
-            values = dict(values)
-            values.update(**values.pop("params"))
-            values["x"] = values.pop("space")
-        return values
 
     def _to_orm(self, init):
         if "x" in init:  # in case it was already popped downstreams

@@ -1,6 +1,4 @@
-#  Copyright (c) 2025 zfit
 
-# TODO: improve errors of models. Generate more general error, inherit and use more specific?
 from __future__ import annotations
 
 import typing
@@ -106,7 +104,6 @@ class ParamNameNotUniqueError(Exception):
     pass
 
 
-# Operation errors
 class IncompatibleError(Exception):
     pass
 
@@ -147,7 +144,6 @@ class ModelIncompatibleError(IncompatibleError):
     pass
 
 
-# Data errors
 class WeightsNotImplementedError(Exception):
     pass
 
@@ -156,19 +152,16 @@ class DataIsBatchedError(Exception):
     pass
 
 
-# Parameter errors
 class ParameterNotIndependentError(Exception):
     pass
 
 
-# Minimizer errors
 
 
 class NotMinimizedError(Exception):
     pass
 
 
-# Runtime Errors
 
 
 class IllegalInGraphModeError(Exception):
@@ -179,7 +172,6 @@ class CannotConvertToNumpyError(Exception):
     pass
 
 
-# Baseclass to steer execution
 class ZfitNotImplementedError(NotImplementedError):
     def __init__(self, *args: object) -> None:
         super().__init__(*args)
@@ -190,76 +182,64 @@ class ZfitNotImplementedError(NotImplementedError):
 
 
 class FunctionNotImplemented(ZfitNotImplementedError):
-    """Any function, e.g. in a BaseModel, that not implemented and a fallback should be called.
-
-    Preferably use more specific exceptions
-    """
+    pass
 
 
 class StandardControlFlow(Exception):
-    """An exception that inherits from this class will be regarded as part of the standard control flow and not as an
-    Error.
-
-    For example, if a function raises that values are NaN, this is often intercepted on purpose.
-    """
+    pass
 
 
 class SpecificFunctionNotImplemented(FunctionNotImplemented):
-    """If a specific function, e.g. by the user is not implemented."""
+    pass
 
 
 class MinimizeNotImplemented(FunctionNotImplemented):
-    """The `minimize` function of a minimizer is not implemented."""
+    pass
 
 
 class MinimizeStepNotImplemented(FunctionNotImplemented):
-    """The `step` function of a minimizer is not implemented."""
+    pass
 
 
 class AnalyticNotImplemented(ZfitNotImplementedError):
-    """General exception if an analytic way is not implemented."""
+    pass
 
 
 class AnalyticIntegralNotImplemented(AnalyticNotImplemented):
-    """If an analytic integral is not provided."""
+    pass
 
 
 class AnalyticSamplingNotImplemented(AnalyticNotImplemented):
-    """If analytic sampling from a distribution is not possible."""
+    pass
 
 
-# PDF class internal handling errors
 class NormNotImplemented(StandardControlFlow):
-    """Indicates that a function does not support the normalization range argument `norm`."""
+    pass
 
 
 NormRangeNotImplemented = NormNotImplemented  # legacy
 
 
 class MultipleLimitsNotImplemented(StandardControlFlow):
-    """Indicates that a function does not support several limits in a :py:class:`~zfit.Space`."""
+    pass
 
 
 class InitNotImplemented(StandardControlFlow):
-    """Indicates that a minimize method does not support a FitResult instead of a loss."""
+    pass
 
 
 class VectorizedLimitsNotImplemented(StandardControlFlow):
-    """Indicates that a function does not support vectorized (n_events > 1) limits in a :py:class:`~zfit.Space`."""
+    pass
 
 
 class DerivativeCalculationError(ValueError):
     pass
 
 
-# Developer verbose messages
 
 
 class WorkInProgressError(Exception):
-    """Only for developing purpose.
-
-    Does not serve as a 'real' Exception.
-    """
+    pass
 
 
 class BreakingAPIChangeError(Exception):

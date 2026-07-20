@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -28,7 +27,7 @@ if typing.TYPE_CHECKING:
 
 
 class NewMinimum(Exception):
-    """Exception class for cases where a new minimum is found."""
+    pass
 
 
 class FailEvalLossNaN(Exception):
@@ -36,11 +35,9 @@ class FailEvalLossNaN(Exception):
 
 
 class RootFound(Exception):
-    """Exception class for cases where a root is found, since SciPy root solvers don't really respect tol or xtol on
-    initial evaluation."""
+    pass
 
 
-# make enum of WeightCorr
 class WeightCorr(Enum):
     ASYMPTOTIC: str = "asymptotic"
     FALSE: bool = False
@@ -160,66 +157,15 @@ def compute_errors(
             _ = loss.value_gradient(params=all_params, full=False)  # to make sure the loss is compiled
 
             def make_optimized_loss_gradient_func(index_poi):
-                @z.function(wraps="gradient", keepalive=True)
-                def wrappedfunc(values, index):
-                    assert isinstance(index, int)
-                    assign_values(all_params, values)
-                    loss_value, gradient = loss.value_gradient(params=all_params, full=False)
-                    if isinstance(gradient, tuple | list):
-                        gradient = znp.asarray(gradient)
-                    gradient = znp.concatenate([gradient[:index_poi], gradient[index_poi + 1 :]])
-                    return loss_value, gradient
 
                 return wrappedfunc
 
             optimized_loss_gradient = make_optimized_loss_gradient_func(index_poi)
 
-            # TODO: improvement, use jacobian?
             root = None
             ntol = 999  # if it's right in the beginning, we think it's fine
 
-            # TODO: should we add a "robust" or similar option to not skip this?
-            # or evaluate and then decide ,maybe use krylov as it doesn't do a lot of calls in the beginning, it
-            # approximates the jacobian
             def make_func(index_poi, optimized_loss_gradient, param):  # bind these values
-                def wrappedfunc(values, args):
-                    nonlocal ncalls, root, ntol
-
-                    ncalls += 1
-                    swap_sign = args
-
-                    try:
-                        loss_value, gradient = optimized_loss_gradient(values, index_poi)
-                    except tf.errors.InvalidArgumentError:
-                        loss_value = znp.array(9999999999.0)
-                        gradient = z.random.normal(stddev=0.1, shape=(len(all_params) - 1,))
-                        # raise FailEvalLossNaN(msg)
-                    zeroed_loss = loss_value - fmin
-
-                    gradient = znp.array(gradient)
-
-                    if swap_sign(param):  # mirror at x-axis to remove second zero
-                        zeroed_loss = -zeroed_loss
-                        gradient = -gradient
-                        logging.info("Swapping sign in error calculation 'zfit_error'")
-
-                    elif zeroed_loss < -loss_min_tol:
-                        assign_values(all_params, values)  # set values to the new minimum
-                        msg = "A new minimum is found."
-                        raise NewMinimum(msg)
-
-                    downward_shift = errordef * sigma**2
-                    shifted_loss = zeroed_loss - downward_shift
-
-                    if abs(shifted_loss) < rtol:
-                        if ntol > 3:
-                            root = values[index_poi]
-                            raise RootFound()
-                        ntol += 1
-                    else:
-                        ntol = 0
-
-                    return znp.concatenate([[shifted_loss], gradient])
 
                 return wrappedfunc
 
@@ -298,24 +244,9 @@ def autodiff_pdf_jacobian(func, params):
         params: A dictionary of parameters with their values that are passed to the function.
     """
     params = list(params.values())
-    # TODO(WrappedVariable): this is needed if we want to use wrapped Variables
-    # params = z.math._extract_tfparams(params)
 
-    # the below fails for some cases (i.e. CB) with an internal error
-    # ValueError: Internal error: Tried to take gradients (or similar) of a variable without handle data:
-    # Tensor("Placeholder_1:0", shape=(), dtype=resource)
 
-    # we didn't report that yet, it's too hard to reproduce with a minimal example currently.
 
-    # with tf.GradientTape(watch_accessed_variables=False) as t2:
-    #     t2.watch(params)
-    #     with tf.GradientTape(watch_accessed_variables=False) as t1:
-    #         t1.watch(params)
-    #         values = func()
-    #
-    #     grad = t1.gradient(values, params)
-    #     grad = tf.convert_to_tensor(grad)
-    # jacobian = t2.jacobian(grad, params)
 
     columns = []
 
@@ -329,7 +260,6 @@ def autodiff_pdf_jacobian(func, params):
     return znp.asarray(columns)
 
 
-# TODO: refactor below, extract separate methods
 def covariance_with_weights(hinv, result, params, *, weightcorr: WeightCorr = None):
     """Compute the covariance matrix of the parameters with weights.
 
@@ -386,8 +316,6 @@ def covariance_with_weights(hinv, result, params, *, weightcorr: WeightCorr = No
         d.weights if d.has_weights else znp.ones((d.nevents,))  # sum(ones_nevents ** 2) = nevents
         for d in data
     ]
-    # extendedweights = [znp.reshape(znp.sum(w), (-1,)) for w in dataweights] if yields else []
-    # extendedweights = [znp.ones((len(yields),))] if yields else []
     constrweights = [znp.ones((len(constraints),))] if constraints else []
     allweights = znp.concatenate(dataweights + constrweights, axis=0)
     allweights2 = allweights**2
@@ -408,23 +336,11 @@ def covariance_with_weights(hinv, result, params, *, weightcorr: WeightCorr = No
 
         for i, (m, d) in enumerate(zip(model, data, strict=True)):
             v = m.log_pdf(d)
-            # we calculate the unweighted likelihood, correct?
-            # weights = d.weights
-            # print(f"weights: {weights}, corrfactor: {corrfactor}")
-            # if weights is not None:
-            #     print(f"weights: {weights}, corrfactor: {corrfactor}")
-            #     v *= weights
 
             if yields is not None:
                 yi = yields[i]
-                # shouldn't the normal yield be enough? Not quite sure why not
-                # Probably because it's a sum of the weights
-                # nevents_collected = d.samplesize
-                # extendedterm = tf.nn.log_poisson_loss(nevents_collected, znp.log(yi), compute_full_loss=True)
-                # values.append(term_new)
                 extendedterm = znp.log(yi)
                 v += extendedterm
-                # values.append(extendedterm[..., None])  # make it an array like the others
             values.append(v)
         if constraints is not None:
             for constraint in constraints:
@@ -447,9 +363,6 @@ def covariance_with_weights(hinv, result, params, *, weightcorr: WeightCorr = No
                 raise ValueError(msg) from error
         else:
 
-            def wrapped_func(values):
-                assign_values(list(params_dict.values()), values)
-                return np.array(func())
 
             jacobian = numerical_pdf_jacobian(func=wrapped_func, params=params_dict)
 
@@ -457,8 +370,6 @@ def covariance_with_weights(hinv, result, params, *, weightcorr: WeightCorr = No
 
         covariance = np.asarray(znp.matmul(Hinv, znp.matmul(C, Hinv)))
     elif weightcorr == WeightCorr.SUMW2:
-        # Not quite correct, technically. The weights should be squared in the
-        # NLL calculation
         covariance = Hinv * corrfactor
     assign_values(params, old_vals)
     return matrix_to_dict(params, covariance)
@@ -499,46 +410,4 @@ def matrix_to_dict(params, matrix):
 
 
 def np_cache(*args, **kwargs):
-    """LRU cache implementation for functions whose FIRST parameter is a numpy array.
-
-    >>> array = np.array([[1, 2, 3], [4, 5, 6]])
-    >>> @np_cache(maxsize=256)
-    ... def multiply(array, factor):
-    ...     print("Calculating...")
-    ...     return factor*array
-    >>> multiply(array, 2)
-    Calculating...
-    array([[ 2,  4,  6],
-           [ 8, 10, 12]])
-    >>> multiply(array, 2)
-    array([[ 2,  4,  6],
-           [ 8, 10, 12]])
-    >>> multiply.cache_info()
-    CacheInfo(hits=1, misses=1, maxsize=256, currsize=1)
-    """
-
-    def decorator(function):
-        @wraps(function)
-        def wrapper(np_array, *args, **kwargs):
-            hashable_array = array_to_tuple(np_array)
-            return cached_wrapper(hashable_array, *args, **kwargs)
-
-        @lru_cache(*args, **kwargs)
-        def cached_wrapper(hashable_array, *args, **kwargs):
-            array = np.array(hashable_array)
-            return function(array, *args, **kwargs)
-
-        def array_to_tuple(np_array):
-            """Iterates recursively."""
-            try:
-                return tuple(array_to_tuple(_) for _ in np_array)
-            except TypeError:
-                return np_array
-
-        # copy lru_cache attributes over too
-        wrapper.cache_info = cached_wrapper.cache_info
-        wrapper.cache_clear = cached_wrapper.cache_clear
-
-        return wrapper
-
-    return decorator
+    pass

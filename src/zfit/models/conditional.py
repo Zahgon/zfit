@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -87,15 +86,11 @@ class ConditionalPDFV1(BaseFunctor):
             use_vectorized_map:
             sample_with_replacement:
         """
-        # TODO: add to serializer, see below repr for problem
-        # original_init = {'pdf': pdf, 'cond': cond, 'name': name, 'extended': extended, 'norm': norm,
-        #                  'use_vectorized_map': use_vectorized_map, 'sample_with_replacement': sample_with_replacement}
         self._sample_with_replacement = sample_with_replacement
         self._use_vectorized_map = use_vectorized_map
         self._cond, cond_obs = self._check_input_cond(cond)
         obs = pdf.space * cond_obs
         super().__init__(pdfs=pdf, obs=obs, name=name, extended=extended, norm=norm, label=label)
-        # self.hs3.original_init.update(original_init)  # TODO: add to serializer
 
     @property
     def cond(self) -> dict[ZfitIndependentParameter, ZfitSpace]:
@@ -125,13 +120,7 @@ class ConditionalPDFV1(BaseFunctor):
             output_signature = tf.TensorSpec(shape=(1, *x_values.shape[1:-1]), dtype=self.dtype)
             tf_map = functools.partial(tf.map_fn, fn_output_signature=output_signature)
 
-        # TODO: reset parameters?
 
-        def eval_pdf(cond_and_data):
-            x_pdf = cond_and_data[None, ..., : pdf.n_obs]
-            for param, index in param_x_indices.items():
-                param.assign(cond_and_data[..., index])
-            return pdf.pdf(x_pdf, norm=norm)
 
         params = tuple(param_x_indices.keys())
         with set_values(params, params):
@@ -171,12 +160,6 @@ class ConditionalPDFV1(BaseFunctor):
             output_signature = tf.TensorSpec(shape=(1, *x_values.shape[1:-1]), dtype=self.dtype)
             tf_map = functools.partial(tf.map_fn, fn_output_signature=output_signature)
 
-        @z.function(wraps="vectorized_map")
-        def eval_int(values):
-            for param, index in param_x_indices.items():
-                param.assign(values[..., index])
-
-            return pdf.integrate(limits=limits, norm=norm, options=options)
 
         integrals = tf_map(eval_int, x_values)
         return integrals[:, 0]  # removing stack dimension, implicitly in map_fn
@@ -191,8 +174,6 @@ class ConditionalPDFV1(BaseFunctor):
 
         param_x_indices = {p: x.obs.index(p_space.obs[0]) for p, p_space in self._cond.items()}
         x_values = x.value()
-        # if self._sample_with_replacement:
-        #     x_values = z.random.sample_with_replacement(x_values, axis=0, sample_shape=(n,))
         pdf = self.pdfs[0]
 
         from zfit import run  # todo: we could use the normal python map for eager?  # noqa: PLC0415
@@ -203,11 +184,6 @@ class ConditionalPDFV1(BaseFunctor):
             output_signature = tf.TensorSpec(shape=(1, pdf.n_obs), dtype=self.dtype)
             tf_map = functools.partial(tf.map_fn, fn_output_signature=output_signature)
 
-        def eval_sample(values):
-            for param, index in param_x_indices.items():
-                param.assign(values[..., index])
-
-            return pdf.sample(n=1, limits=limits).value()
 
         sample_rnd = tf_map(eval_sample, x_values)[..., 0]
         return znp.concatenate([sample_rnd, x_values], axis=-1)
@@ -217,29 +193,3 @@ class ConditionalPDFV1(BaseFunctor):
         raise WorkInProgressError(msg)
 
 
-# NOT working, logic wrong: the parameter of Gauss is not added to overall variables...
-# class ConditionalPDFV1Repr(BasePDFRepr):
-#     _implementation = ConditionalPDFV1
-#     hs3_type: Literal["ConditionalPDFV1"] = pydantic.Field("ConditionalPDFV1", alias="type")
-#
-#     pdf: List[Serializer.types.PDFTypeDiscriminated]
-#     cond: Dict[Serializer.types.ParamTypeDiscriminated, Union[SpaceRepr, Tuple[str]]]
-#     obs: Optional[Union[SpaceRepr, Tuple[str]]] = None
-#     extended: Serializer.types.ParamInputTypeDiscriminated = None
-#
-#     #
-#     @pydantic.root_validator(pre=True)
-#     def validate_all(cls, values):
-#         if cls.orm_mode(values):
-#             values = dict(values)
-#             for k, v in values['hs3'].original_init.items():
-#                 values[k] = v
-#             values['pdf'] = [values['pdf']]
-#             values['obs'] = values['space']
-#         return values
-#
-#     def _to_orm(self, init):
-#         init = dict(init)
-#         init['pdf'] = init['pdf'][0]
-#         out = super()._to_orm(init)
-#         return out

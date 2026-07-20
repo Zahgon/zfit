@@ -1,17 +1,3 @@
-#  Copyright (c) 2025 zfit
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Root search functions."""
 
 from __future__ import annotations
 
@@ -40,23 +26,8 @@ def default_relative_root_tolerance(dtype):
     return 4 * np.finfo(dtype.as_numpy_dtype(0)).eps
 
 
-# TODO(b/179451420): Refactor BrentResults as RootSearchResults and return it
-# for newton method as well.
 @tff_dataclass
 class BrentResults:
-    """Brent root search results.
-
-    Attributes:
-      estimated_root: A `Tensor` containing the best estimate. If the search was
-        successful, this estimate is a root of the objective function.
-      objective_at_estimated_root: A `Tensor` containing the value of the
-        objective function at  the best estimate. If the search was successful,
-        then this is close to 0.
-      num_iterations: A `Tensor` containing number of iterations performed for
-        each pair of starting points
-      converged: A boolean `Tensor` indicating whether the best estimate is a root
-        within the tolerance specified for the search.
-    """
 
     estimated_root: types.RealTensor
     objective_at_estimated_root: types.RealTensor
@@ -66,7 +37,6 @@ class BrentResults:
 
 @tff_dataclass
 class _BrentSearchConstants:
-    """Values which remain fixed across all root searches."""
 
     false: types.BoolTensor
     zero: types.RealTensor
@@ -75,7 +45,6 @@ class _BrentSearchConstants:
 
 @tff_dataclass
 class _BrentSearchState:
-    """Values which are updated during the root search."""
 
     best_estimate: types.RealTensor
     value_at_best_estimate: types.RealTensor
@@ -91,7 +60,6 @@ class _BrentSearchState:
 
 @tff_dataclass
 class _BrentSearchParams:
-    """Values which remain fixed for a given root search."""
 
     objective_fn: Callable[[types.BoolTensor], types.BoolTensor]
     max_iterations: types.IntTensor
@@ -181,9 +149,6 @@ def _should_stop(state, stopping_policy_fn):
     return tf.convert_to_tensor(stopping_policy_fn(state.finished), name="should_stop", dtype=tf.bool)
 
 
-# This is a direct translation of the Brent root-finding method.
-# Each operation is guarded by a call to `tf.where` to avoid performing
-# unnecessary calculations.
 def _brent_loop_body(state, params, constants):
     """Performs one iteration of the Brent root-finding algorithm.
 
@@ -207,8 +172,6 @@ def _brent_loop_body(state, params, constants):
     num_iterations = state.num_iterations
     finished = state.finished
 
-    # If the root is between the last two estimates, use the worst of the two
-    # as new contrapoint. Adjust step sizes accordingly.
     replace_contrapoint = ~finished & (value_at_last_estimate * value_at_best_estimate < constants.zero_value)
 
     contrapoint = tf.where(replace_contrapoint, last_estimate, contrapoint)
@@ -217,8 +180,6 @@ def _brent_loop_body(state, params, constants):
     step_to_last_estimate = tf.where(replace_contrapoint, best_estimate - last_estimate, step_to_last_estimate)
     step_to_best_estimate = tf.where(replace_contrapoint, step_to_last_estimate, step_to_best_estimate)
 
-    # If the contrapoint is a better guess than the current root estimate, swap
-    # them. Also, replace the worst of the two with the current contrapoint.
     replace_best_estimate = tf.where(
         finished,
         constants.false,
@@ -233,19 +194,11 @@ def _brent_loop_body(state, params, constants):
     value_at_best_estimate = tf.where(replace_best_estimate, value_at_contrapoint, value_at_best_estimate)
     value_at_contrapoint = tf.where(replace_best_estimate, value_at_last_estimate, value_at_contrapoint)
 
-    # Compute the tolerance used to control root search at the current position
-    # and the step size corresponding to the bisection method.
     root_tolerance = 0.5 * (
         params.absolute_root_tolerance + params.relative_root_tolerance * tf.math.abs(best_estimate)
     )
     bisection_step = 0.5 * (contrapoint - best_estimate)
 
-    # Mark the search as finished if either:
-    # 1. the maximum number of iterations has been reached;
-    # 2. the desired tolerance has been reached (even if no root was found);
-    # 3. the current root estimate is good enough.
-    # Using zero as `function_tolerance` will check for exact roots and match
-    # both Brent's original algorithm and the SciPy implementation.
     finished |= (
         (num_iterations >= params.max_iterations)
         | (tf.math.abs(bisection_step) < root_tolerance)
@@ -253,8 +206,6 @@ def _brent_loop_body(state, params, constants):
         | (tf.math.abs(value_at_best_estimate) <= params.function_tolerance)
     )
 
-    # Determine whether interpolation or extrapolation are worth performing at
-    # the current position.
     compute_short_step = tf.where(
         finished,
         constants.false,
@@ -265,20 +216,13 @@ def _brent_loop_body(state, params, constants):
     short_step = tf.where(
         compute_short_step,
         tf.where(
-            # The contrapoint cannot be equal to the current root estimate since
-            # they have opposite signs. However, it may be equal to the previous
-            # estimate.
             tf.equal(last_estimate, contrapoint),
-            # If so, use the secant method to avoid a division by zero which
-            # would occur if using extrapolation.
             _secant_step(
                 best_estimate,
                 last_estimate,
                 value_at_best_estimate,
                 value_at_last_estimate,
             ),
-            # Pass values of the objective function as x values, and root
-            # estimates as y values in order to perform *inverse* extrapolation.
             _quadratic_interpolation_step(
                 value_at_best_estimate,
                 value_at_last_estimate,
@@ -288,15 +232,9 @@ def _brent_loop_body(state, params, constants):
                 contrapoint,
             ),
         ),
-        # Default to zero if using bisection.
         constants.zero,
     )
 
-    # Use the step calculated above if both:
-    # 1. step size < |previous step size|
-    # 2. step size < 3/4 * |contrapoint - current root estimate|
-    # Ensure that `short_step` was calculated by guarding the calculation with
-    # `compute_short_step`.
     use_short_step = tf.where(
         compute_short_step,
         2 * tf.math.abs(short_step)
@@ -307,11 +245,9 @@ def _brent_loop_body(state, params, constants):
         constants.false,
     )
 
-    # Revert to bisection when not using `short_step`.
     step_to_last_estimate = tf.where(use_short_step, step_to_best_estimate, bisection_step)
     step_to_best_estimate = tf.where(finished, constants.zero, tf.where(use_short_step, short_step, bisection_step))
 
-    # Update the previous and current root estimates.
     last_estimate = tf.where(finished, last_estimate, best_estimate)
     best_estimate += tf.where(
         finished,
@@ -478,19 +414,12 @@ def _prepare_brent_args(
     zero_value = tf.zeros_like(value_at_left_bracket)
     value_at_contrapoint = zero_value
 
-    # Select the best root estimates from the inputs.
-    # If no search is performed (e.g. `max_iterations` is `zero`), the estimate
-    # computed this way will be returned. This differs slightly from the SciPy
-    # implementation which always returns the `right_bracket`.
     swap_positions = tf.math.abs(value_at_left_bracket) < tf.math.abs(value_at_right_bracket)
     best_estimate, last_estimate = _swap_where(swap_positions, right_bracket, left_bracket)
     value_at_best_estimate, value_at_last_estimate = _swap_where(
         swap_positions, value_at_right_bracket, value_at_left_bracket
     )
 
-    # Check if the current root estimate is good enough.
-    # Using zero as `function_tolerance` will check for exact roots and match both
-    # Brent's original algorithm and the SciPy implementation.
     finished = (
         (num_iterations >= max_iterations)
         | (~tf.math.is_finite(value_at_last_estimate))
@@ -523,8 +452,6 @@ def _prepare_brent_args(
     )
 
 
-# `_brent` currently only support inverse quadratic extrapolation.
-# This will be fixed when adding the `brenth` variant.
 def _brent(
     objective_fn,
     left_bracket,
@@ -675,9 +602,6 @@ def _brent(
 
         with tf.compat.v1.control_dependencies(assertions):
             result = tf.while_loop(
-                # Negate `_should_stop` to determine if the search should continue.
-                # This means, in particular, that tf.reduce_*all* will return only
-                # when the search is finished for *all* starting points.
                 lambda loop_vars: ~_should_stop(loop_vars, params.stopping_policy_fn),
                 lambda state: _brent_loop_body(state, params, constants),
                 loop_vars=[state],

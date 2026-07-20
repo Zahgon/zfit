@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -37,7 +36,6 @@ def preprocess_pdf_or_hist(models: ZfitPDF | Iterable[ZfitPDF] | BinnedDataInput
 
 
 class BaseBinnedFunctorPDF(FunctorMixin, BaseBinnedPDF):
-    """Base class for binned functors."""
 
     def __init__(self, models, obs, **kwargs):
         models = preprocess_pdf_or_hist(models)

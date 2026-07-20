@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -67,167 +66,16 @@ def generalized_crystalball_func(x, mu, sigmal, alphal, nl, sigmar, alphar, nr):
     )
 
 
-# created with the help of TensorFlow autograph used on python code converted from ShapeCB of RooFit
-def crystalball_integral(limits, params, model) -> tf.Tensor:
-    del model
-    mu = params["mu"]
-    sigma = params["sigma"]
-    alpha = params["alpha"]
-    n = params["n"]
-
-    lower, upper = limits._rect_limits_tf
-
-    return crystalball_integral_func(mu, sigma, alpha, n, lower, upper)
 
 
-@z.function(wraps="tensor", keepalive=True)
-def crystalball_integral_func(mu, sigma, alpha, n, lower, upper):
-    sqrt_pi_over_two = np.sqrt(np.pi / 2)
-    sqrt2 = np.sqrt(2)
-
-    use_log = tf.less(znp.abs(n - 1.0), 1e-05)
-    abs_sigma = znp.abs(sigma)
-    abs_alpha = znp.abs(alpha)
-    tmin = (lower - mu) / abs_sigma
-    tmax = (upper - mu) / abs_sigma
-
-    alpha_negative = tf.less(alpha, 0)
-    # do not move on two lines, logic will fail...
-    tmax, tmin = (
-        znp.where(alpha_negative, -tmin, tmax),
-        znp.where(alpha_negative, -tmax, tmin),
-    )
-
-    if_true_4 = abs_sigma * sqrt_pi_over_two * (tf.math.erf(tmax / sqrt2) - tf.math.erf(tmin / sqrt2))
-
-    a = znp.power(n / abs_alpha, n) * znp.exp(-0.5 * tf.square(abs_alpha))
-    b = n / abs_alpha - abs_alpha
-
-    # gradients from tf.where can be NaN if the non-selected branch is NaN
-    # https://github.com/tensorflow/tensorflow/issues/42889
-    # solution is to provide save values for the non-selected branch to never make them become NaNs
-    b_tmin = b - tmin
-    safe_b_tmin_ones = znp.where(b_tmin > 0, b_tmin, znp.ones_like(b_tmin))
-    b_tmax = b - tmax
-    safe_b_tmax_ones = znp.where(b_tmax > 0, b_tmax, znp.ones_like(b_tmax))
-
-    if_true_1 = a * abs_sigma * (znp.log(safe_b_tmin_ones) - znp.log(safe_b_tmax_ones))
-
-    if_false_1 = (
-        a
-        * abs_sigma
-        / (1.0 - n)
-        * (1.0 / znp.power(safe_b_tmin_ones, n - 1.0) - 1.0 / znp.power(safe_b_tmax_ones, n - 1.0))
-    )
-
-    if_true_3 = tf.where(use_log, if_true_1, if_false_1)
-
-    if_true_2 = a * abs_sigma * (znp.log(safe_b_tmin_ones) - znp.log(n / abs_alpha))
-    if_false_2 = (
-        a
-        * abs_sigma
-        / (1.0 - n)
-        * (1.0 / znp.power(safe_b_tmin_ones, n - 1.0) - 1.0 / znp.power(n / abs_alpha, n - 1.0))
-    )
-    term1 = tf.where(use_log, if_true_2, if_false_2)
-    term2 = abs_sigma * sqrt_pi_over_two * (tf.math.erf(tmax / sqrt2) - tf.math.erf(-abs_alpha / sqrt2))
-    if_false_3 = term1 + term2
-
-    if_false_4 = tf.where(tf.less_equal(tmax, -abs_alpha), if_true_3, if_false_3)
-
-    # if_false_4()
-    result = tf.where(tf.greater_equal(tmin, -abs_alpha), if_true_4, if_false_4)
-    if result.shape.rank != 0:
-        result = result[..., 0]  # remove last dim, should vanish
-    return result
 
 
-def double_crystalball_mu_integral(limits, params, model) -> tf.Tensor:
-    del model
-    mu = params["mu"]
-    sigma = params["sigma"]
-    alphal = params["alphal"]
-    nl = params["nl"]
-    alphar = params["alphar"]
-    nr = params["nr"]
-
-    lower, upper = limits._rect_limits_tf
-    lower = lower[:, 0]
-    upper = upper[:, 0]
-
-    return double_crystalball_mu_integral_func(
-        mu=mu,
-        sigma=sigma,
-        alphal=alphal,
-        nl=nl,
-        alphar=alphar,
-        nr=nr,
-        lower=lower,
-        upper=upper,
-    )
 
 
-@z.function(wraps="tensor")  # TODO: this errors, fro whatever reason?
-def double_crystalball_mu_integral_func(mu, sigma, alphal, nl, alphar, nr, lower, upper):
-    # mu_broadcast =
-    upper_of_lowerint = znp.minimum(mu, upper)
-    integral_left = crystalball_integral_func(
-        mu=mu, sigma=sigma, alpha=alphal, n=nl, lower=lower, upper=upper_of_lowerint
-    )
-    left = tf.where(tf.less(mu, lower), znp.zeros_like(integral_left), integral_left)
-
-    lower_of_upperint = znp.maximum(mu, lower)
-    integral_right = crystalball_integral_func(
-        mu=mu, sigma=sigma, alpha=-alphar, n=nr, lower=lower_of_upperint, upper=upper
-    )
-    right = tf.where(tf.greater(mu, upper), znp.zeros_like(integral_right), integral_right)
-
-    return left + right
 
 
-def generalized_crystalball_mu_integral(limits, params, model) -> tf.Tensor:
-    del model
-    mu = params["mu"]
-    sigmal = params["sigmal"]
-    alphal = params["alphal"]
-    nl = params["nl"]
-    sigmar = params["sigmar"]
-    alphar = params["alphar"]
-    nr = params["nr"]
-
-    lower, upper = limits._rect_limits_tf
-    lower = lower[:, 0]
-    upper = upper[:, 0]
-
-    return generalized_crystalball_mu_integral_func(
-        mu=mu,
-        sigmal=sigmal,
-        alphal=alphal,
-        nl=nl,
-        sigmar=sigmar,
-        alphar=alphar,
-        nr=nr,
-        lower=lower,
-        upper=upper,
-    )
 
 
-@z.function(wraps="tensor")
-def generalized_crystalball_mu_integral_func(mu, sigmal, alphal, nl, sigmar, alphar, nr, lower, upper):
-    # mu_broadcast =
-    upper_of_lowerint = znp.minimum(mu, upper)
-    integral_left = crystalball_integral_func(
-        mu=mu, sigma=sigmal, alpha=alphal, n=nl, lower=lower, upper=upper_of_lowerint
-    )
-    left = tf.where(tf.less(mu, lower), znp.zeros_like(integral_left), integral_left)
-
-    lower_of_upperint = znp.maximum(mu, lower)
-    integral_right = crystalball_integral_func(
-        mu=mu, sigma=sigmar, alpha=-alphar, n=nr, lower=lower_of_upperint, upper=upper
-    )
-    right = tf.where(tf.greater(mu, upper), znp.zeros_like(integral_right), integral_right)
-
-    return left + right
 
 
 class CrystalBall(BasePDF, SerializableMixin):
@@ -633,95 +481,12 @@ def generalized_gaussexptail_func(x, mu, sigmal, alphal, sigmar, alphar):
     )
 
 
-def gaussexptail_integral(limits, params, model):
-    del model
-    mu = params["mu"]
-    sigma = params["sigma"]
-    alpha = params["alpha"]
-
-    lower, upper = limits._rect_limits_tf
-
-    return gaussexptail_integral_func(mu, sigma, alpha, lower, upper)
 
 
-@z.function(wraps="tensor", keepalive=True)
-def gaussexptail_integral_func(mu, sigma, alpha, lower, upper):
-    sqrt_pi_over_two = np.sqrt(np.pi / 2)
-    sqrt2 = np.sqrt(2)
-
-    abs_sigma = znp.abs(sigma)
-    abs_alpha = znp.abs(alpha)
-    tmin = (lower - mu) / abs_sigma
-    tmax = (upper - mu) / abs_sigma
-
-    alpha_negative = tf.less(alpha, 0)
-    # do not move on two lines, logic will fail...
-    tmax, tmin = (
-        znp.where(alpha_negative, -tmin, tmax),
-        znp.where(alpha_negative, -tmax, tmin),
-    )
-
-    gauss_tmin_tmax_integral = abs_sigma * sqrt_pi_over_two * (tf.math.erf(tmax / sqrt2) - tf.math.erf(tmin / sqrt2))
-    exp_tmin_tmax_integral = (
-        abs_sigma
-        / abs_alpha
-        * znp.exp(0.5 * znp.square(abs_alpha))
-        * (znp.exp(abs_alpha * tmax) - znp.exp(abs_alpha * tmin))
-    )
-    gauss_minus_abs_alpha_tmax_integral = (
-        abs_sigma * sqrt_pi_over_two * (tf.math.erf(tmax / sqrt2) - tf.math.erf(-abs_alpha / sqrt2))
-    )
-    exp_tmin_minus_abs_alpha_integral = (
-        abs_sigma
-        / abs_alpha
-        * znp.exp(0.5 * znp.square(abs_alpha))
-        * (znp.exp(-znp.square(abs_alpha)) - znp.exp(abs_alpha * tmin))
-    )
-    integral_sum = exp_tmin_minus_abs_alpha_integral + gauss_minus_abs_alpha_tmax_integral
-
-    conditional_integral = tf.where(tf.less_equal(tmax, -abs_alpha), exp_tmin_tmax_integral, integral_sum)
-    result = tf.where(tf.greater_equal(tmin, -abs_alpha), gauss_tmin_tmax_integral, conditional_integral)
-    if result.shape.rank != 0:
-        result = result[..., 0]
-    return result
 
 
-def generalized_gaussexptail_integral(limits, params, model):
-    del model
-    mu = params["mu"]
-    sigmal = params["sigmal"]
-    alphal = params["alphal"]
-    sigmar = params["sigmar"]
-    alphar = params["alphar"]
-
-    lower, upper = limits._rect_limits_tf
-    lower = lower[:, 0]
-    upper = upper[:, 0]
-
-    return generalized_gaussexptail_integral_func(
-        mu=mu,
-        sigmal=sigmal,
-        alphal=alphal,
-        sigmar=sigmar,
-        alphar=alphar,
-        lower=lower,
-        upper=upper,
-    )
 
 
-@z.function(wraps="tensor", keepalive=True)
-def generalized_gaussexptail_integral_func(mu, sigmal, alphal, sigmar, alphar, lower, upper):
-    upper_of_lowerint = znp.minimum(mu, upper)
-    integral_left = gaussexptail_integral_func(mu=mu, sigma=sigmal, alpha=alphal, lower=lower, upper=upper_of_lowerint)
-    left = tf.where(tf.less(mu, lower), znp.zeros_like(integral_left), integral_left)
-
-    lower_of_upperint = znp.maximum(mu, lower)
-    integral_right = gaussexptail_integral_func(
-        mu=mu, sigma=sigmar, alpha=-alphar, lower=lower_of_upperint, upper=upper
-    )
-    right = tf.where(tf.greater(mu, upper), znp.zeros_like(integral_right), integral_right)
-
-    return left + right
 
 
 class GaussExpTail(BasePDF, SerializableMixin):

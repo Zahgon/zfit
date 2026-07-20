@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -67,26 +66,10 @@ def to_real(x, dtype=None):
     return znp.asarray(x, dtype=dtype)
 
 
-def abs_square(x):
-    return znp.real(x * znp.conj(x))
 
 
 def nth_pow(x, n):
-    """Calculate the nth power of the complex Tensor x.
-
-    Args:
-        x:
-        n: Power of x, has to be a positive int
-        name: No effect, for API compatibility with tf.pow
-    """
-    if n < 0:
-        msg = f"n (power) has to be >= 0. Currently, n={n}"
-        raise ValueError(msg)
-
-    power = to_complex(1.0)
-    for _ in range(n):
-        power *= x
-    return power
+    pass
 
 
 def unstack_x(
@@ -127,19 +110,9 @@ def unstack_x(
 
 
 def stack_x(values, axis: int = -1, name: str | None = None):
-    """Stack values along the specified axis.
-
-    Args:
-        values: Values to stack.
-        axis: Axis to stack along. Defaults to -1.
-        name: Name for the operation. Defaults to "stack_x" if None.
-    """
-    if name is None:
-        name = "stack_x"
-    return tf.stack(values=values, axis=axis, name=name)
+    pass
 
 
-# random sampling
 
 
 def convert_to_tensor(value, dtype=None, name=None, preferred_dtype=None):
@@ -174,26 +147,10 @@ def safe_where(
     return tf.where(condition=condition, x=func(safe_x), y=safe_func(values))
 
 
-def run_no_nan(func, x):
-    from zfit.core.data import Data  # noqa: PLC0415
-
-    value_with_nans = func(x=x)
-    if value_with_nans.dtype in (tf.complex128, tf.complex64):
-        value_with_nans = znp.real(value_with_nans) + znp.imag(value_with_nans)  # we care only about NaN or not
-    finite_bools = znp.isfinite(znp.asarray(value_with_nans, dtype=tf.float64))
-    finite_indices = tf.where(finite_bools)
-    new_x = tf.gather_nd(params=x, indices=finite_indices)
-    new_x = Data.from_tensor(obs=x.obs, tensor=new_x)
-    vals_no_nan = func(x=new_x)
-    return tf.scatter_nd(
-        indices=finite_indices,
-        updates=vals_no_nan,
-        shape=tf.shape(input=value_with_nans, out_type=finite_indices.dtype),
-    )
 
 
 class DoNotCompile(Exception):
-    """Raise this error if the function is being jitted but should not be (yet)."""
+    pass
 
 
 DEFAULT_XLAJIT_KWARGS = {"autograph": False, "reduce_retracing": True, "jit_compile": True}
@@ -278,31 +235,13 @@ class FunctionWrapperRegistry:
         self.cachesize = cachesize
         self.keepalive = keepalive
 
-    @property
-    def do_jit(self):
-        return self.do_jit_types[self.wraps] and self.allow_jit and not self.force_eager
 
     def reset(self, **_):
         self.function_cache.clear()
 
     def set_graph_cache_size(self, cachesize: int | None = None):
-        """Set the size of the graph cache.
+        pass
 
-        Args:
-            cachesize: Size of the cache. If None, the default size is used.
-        """
-        if cachesize is None:
-            cachesize = self.DEFAULT_CACHE_SIZE
-        self.cachesize = cachesize
-        while len(self.function_cache) >= self.cachesize:
-            self.function_cache.popleft()
-
-    @property
-    def tf_function(self):
-        kwargs = self.DEFAULT_TF_FUNCTION_KWARGS.get(self.wraps, DEFAULT_NOXLAJIT_KWARGS).copy()
-        kwargs.update(self._initial_user_kwargs)
-
-        return tf.function(**kwargs)
 
     def __call__(self, func):
         keepalive = self.keepalive
@@ -311,101 +250,10 @@ class FunctionWrapperRegistry:
         deleted_cachers = self._deleted_cachers
         from ..util.cache import FunctionCacheHolder  # noqa: PLC0415
 
-        def concrete_func(*args, **kwargs):
-            if self.force_eager and not run.executing_eagerly():  # if we're executing eagerly, let's be graceful
-                raise DoNotCompile
-            # skip JIT in certain situations
-            if not self.do_jit or func in self.currently_traced or not run.executing_eagerly():
-                return func(*args, **kwargs)
-
-            self.currently_traced.add(func)
-            nonlocal wrapped_func
-
-            # todo: we could return the function here? Need still registry to avoid deadlock in TF
-            # try:
-            #     value = wrapped_func(*args, **kwargs)
-            # finally:
-            #     self.currently_traced.remove(func)
-            # return value
-
-            def deleter(proxy):
-                del proxy
-                with contextlib.suppress(ValueError):
-                    cache.remove(function_holder)
-
-            function_holder = FunctionCacheHolder(
-                func, wrapped_func, args, kwargs, deleter=deleter, stateless_args=self.stateless_args, xla=True
-            )
-            try:
-                func_holder_index = cache.index(function_holder)
-            except ValueError:
-                wrapped_func = self.tf_function(func)
-                func_to_run = wrapped_func
-                function_holder = FunctionCacheHolder(
-                    func,
-                    wrapped_func,
-                    args,
-                    kwargs,
-                    deleter=deleter,
-                    stateless_args=self.stateless_args,
-                    keepalive=keepalive,
-                )
-                if len(cache) >= self.cachesize:
-                    popped_holder = cache.popleft()
-                    hash_popped_holder = hash(popped_holder)
-                    deleted_cachers.update((hash_popped_holder,))
-                    if self._deleted_cachers[hash_popped_holder] > 3:
-                        warnings.warn(
-                            f"Function {function_holder.python_func} was removed from the cache more than 3"
-                            f" times (and getting recompiled). Maybe consider increasing the cache size"
-                            f" using `zfit.run.set_graph_cache_size(...)`, the current size is {self.cachesize}.",
-                            RuntimeWarning,
-                            stacklevel=2,
-                        )
-
-                        self._deleted_cachers - Counter({hash(function_holder): int(-1e100)})  # won't be warned again
-                    del popped_holder
-                cache.append(function_holder)
-            else:
-                function_holder = cache[func_holder_index]
-                func_to_run = function_holder.execute_func
-
-            try:
-                try:
-                    result = func_to_run(*args, **kwargs)
-                except KeyError as error:
-                    warnings.warn(
-                        f"An error occurred while running a jitted function. The error was: {error}."
-                        f" The function will be recompiled",
-                        RuntimeWarning,
-                        stacklevel=3,
-                    )
-                    result = func_to_run(*args, **kwargs)
-                # TODO: the following automatically tries again with XLA disabled. But currently, just rerunning will not work well.
-                # except Exception as error:
-                #     function_kwargs = self.tf_function_kwargs.copy()
-                #     if function_kwargs.get("jit_compile"):
-                #         function_kwargs["jit_compile"] = False
-                #         wrapped_func = tf.function(func, **function_kwargs)
-                #         function_holder.wrapped_func = wrapped_func
-                #         func_to_run = function_holder.execute_func
-                #         print(f"Tried to XLA, falling back {error}")
-                #         result = func_to_run(*args, **kwargs)
-                #     else:
-                #         raise
-            except DoNotCompile:
-                function_holder.do_jit = False
-                if not run.executing_eagerly():
-                    raise
-                result = function_holder.execute_func(*args, **kwargs)
-            finally:
-                self.currently_traced.remove(func)
-            return result
 
         return concrete_func
 
 
-# equivalent to tf.function
 def function(func=None, *, stateless_args=None, cachesize=None, **kwargs):
     """JIT/Graph compilation of functions, `tf.function`-like with additional cache-invalidation functionality.
 
@@ -431,16 +279,3 @@ def function(func=None, *, stateless_args=None, cachesize=None, **kwargs):
     return FunctionWrapperRegistry(**kwargs, cachesize=cachesize, stateless_args=stateless_args)
 
 
-@functools.wraps(tf.py_function)
-def py_function(func, inp, Tout, name=None):
-    from .. import settings  # noqa: PLC0415
-
-    if not settings.options["numerical_grad"]:
-        warn_advanced_feature(
-            "Using py_function without numerical gradients. If the Python code does not contain any"
-            " parametrization by `zfit.Parameter` or similar, this can work out. Otherwise, in case"
-            " it depends on those, you may want to set `zfit.run.set_autograd_mode(=False)`.",
-            identifier="py_func_autograd",
-        )
-
-    return tf.py_function(func=func, inp=inp, Tout=Tout, name=name)

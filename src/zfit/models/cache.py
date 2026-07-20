@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -28,13 +27,7 @@ if typing.TYPE_CHECKING:
 def get_value(cache: tf.Variable, flag: tf.Variable, func: Callable):
     @tf.custom_gradient
     def actual_func():
-        def autoset_func():
-            val = func()
-            # tf.print(val)
-            return cache.assign(val, read_value=True)
 
-        def use_cache():
-            return cache
 
         val = tf.cond(flag, use_cache, autoset_func)
 
@@ -160,10 +153,6 @@ class CachedPDF(BaseFunctor, SerializableMixin):
         minlen = znp.min([xlen, cachedxlen])
         xtrunc = x[:minlen]
         xcachedtrunc = self._cached_x[:minlen]
-        # for debugging purposes, this fails a lot...
-        # tf.print(tf.shape(xtrunc))
-        # tf.print(tf.shape(xcachedtrunc))
-        # tf.print(xlen, cachedxlen, minlen)
         with tf.control_dependencies([xtrunc, xcachedtrunc]):  # required! Otherwise would use previous shape (bug?)
             xtrunc_diff = xtrunc - xcachedtrunc
         xtruncdiff_abs = znp.abs(xtrunc_diff)
@@ -191,13 +180,7 @@ class CachedPDF(BaseFunctor, SerializableMixin):
             same_args = x_same
         assign1 = self._pdf_cache_valid.assign(same_args, read_value=False)
 
-        def value_update_func():
-            if hasparams:
-                self._cached_pdf_params.assign(stacked_pdf_params, read_value=False)
-            self._cached_x.assign(x, read_value=False)
-            return self.pdfs[0].pdf(x, norm)
 
-        # tf.print(self._pdf_cache)
         with tf.control_dependencies([assign1]):
             return get_value(self._pdf_cache, self._pdf_cache_valid, value_update_func)
 
@@ -236,11 +219,6 @@ class CachedPDF(BaseFunctor, SerializableMixin):
             same_args = limits_same
         assign1 = self._integral_cache_valid.assign(same_args, read_value=False)
 
-        def value_update_func():
-            if hasparams:
-                self._cached_pdf_params_for_integration.assign(stacked_pdf_params, read_value=False)
-            self._cached_integral_limits.assign(stacked_integral_limits, read_value=False)
-            return self.pdfs[0].integrate(limits, norm, options=options)
 
         with tf.control_dependencies([assign1]):
             return get_value(self._integral_cache, self._integral_cache_valid, value_update_func)

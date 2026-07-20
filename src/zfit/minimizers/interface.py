@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import abc
@@ -69,7 +68,6 @@ class ZfitResult:
 
 
 class ZfitMinimizer(abc.ABC):
-    """Define the minimizer interface."""
 
     @abc.abstractmethod
     def minimize(self, loss, params=None, init=None):

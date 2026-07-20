@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import functools
@@ -26,19 +25,10 @@ def convert_to_tensor(value, dtype=ztypes.float) -> tf.Tensor:
     return _znp.asarray(value, dtype)
 
 
-def random_normal(*_, **__) -> typing.NoReturn:
-    msg = "Use z.random.normal instead."
-    raise BreakingAPIChangeError(msg)
 
 
-def random_uniform(*_, **__) -> typing.NoReturn:
-    msg = "Use z.random.uniform instead."
-    raise BreakingAPIChangeError(msg)
 
 
-def random_poisson(*_, **__) -> typing.NoReturn:
-    msg = "Use z.random.poisson instead."
-    raise BreakingAPIChangeError(msg)
 
 
 def square(x, name=None) -> tf.Tensor:

@@ -1,12 +1,4 @@
-"""A rich selection of analytically implemented Distributions (models) are available in `TensorFlow Probability.
 
-<https://github.com/tensorflow/probability>`_. While their API is slightly different from the zfit models, it is similar
-enough to be easily wrapped.
-
-Therefore, a convenient wrapper as well as a lot of implementations are provided.
-"""
-
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -36,7 +28,6 @@ from ..util import ztyping
 from ..util.deprecation import deprecated_args
 from ..util.ztyping import ExtendedInputType, NormInputType
 
-# TODO: improve? while loop over `.sample`? Maybe as a fallback if not implemented?
 
 
 def tfd_analytic_sample(n: int, dist: tfd.Distribution, limits: ztyping.ObsTypeInput):
@@ -66,7 +57,6 @@ def tfd_analytic_sample(n: int, dist: tfd.Distribution, limits: ztyping.ObsTypeI
 
 
 class WrapDistribution(BasePDF):  # TODO: extend functionality of wrapper, like icdf
-    """Baseclass to wrap tensorflow-probability distributions automatically."""
 
     def __init__(
         self,
@@ -79,7 +69,6 @@ class WrapDistribution(BasePDF):  # TODO: extend functionality of wrapper, like 
         name=None,
         **kwargs,
     ):
-        # Check if subclass of distribution?
         if dist_kwargs is None:
             dist_kwargs = {}
 
@@ -95,21 +84,11 @@ class WrapDistribution(BasePDF):  # TODO: extend functionality of wrapper, like 
         self.dist_kwargs = dist_kwargs
         self._inverse_analytic_integral = []
 
-    @property
-    def distribution(self):
-        params = self.dist_params
-        if callable(params):
-            params = params()
-        kwargs = self.dist_kwargs
-        if callable(kwargs):
-            kwargs = kwargs()
-        return self._distribution(**params, **kwargs, name=self.name + "_tfp")
 
     def _unnormalized_pdf(self, x: ZfitData):
         value = z.unstack_x(x)  # TODO: use this? change shaping below?
         return self.distribution.prob(value=value, name="unnormalized_pdf")
 
-    # TODO: register integral?
     @supports()
     def _analytic_integrate(self, limits, norm):
         del norm  # not supported
@@ -123,65 +102,6 @@ class WrapDistribution(BasePDF):  # TODO: extend functionality of wrapper, like 
         return tfd_analytic_sample(n=n, dist=self.distribution, limits=limits)
 
 
-# class KernelDensityTFP(WrapDistribution):
-#
-#     def __init__(self, loc: ztyping.ParamTypeInput, scale: ztyping.ParamTypeInput, obs: ztyping.ObsTypeInput,
-#                  kernel: tfp.distributions.Distribution = tfp.distributions.Normal,
-#                  weights: Union[None, np.ndarray, tf.Tensor] = None, name: str = "KernelDensity"):
-#         """Kernel Density Estimation of loc and either a broadcasted or a per-loc scale with a Distribution as kernel.
-#
-#         Args:
-#             loc: 1-D Tensor-like. The positions of the `kernel`. Determines how many kernels will be created.
-#             scale: Broadcastable to the batch and event shape of the distribution. A scalar will simply broadcast
-#                 to `loc` for a 1-D distribution.
-#             obs: Observables
-#             kernel: Distribution that is used as kernel
-#             weights: Weights of each `loc`, can be None or Tensor-like with shape compatible with loc
-#             name: Name of the PDF
-#         """
-#         if not isinstance(kernel,
-#                           tfp.distributions.Distribution) and False:  # HACK remove False, why does test not work?
-#             raise TypeError("Currently, only tfp distributions are supported as kernels. Please open an issue if this "
-#                             "is too restrictive.")
-#
-#         if isinstance(loc, ZfitData):
-#             if loc.weights is not None:
-#                 if weights is not None:
-#                     raise OverdefinedError("Cannot specify weights and use a `ZfitData` with weights.")
-#                 else:
-#                     weights = loc.weights
-#
-#         if weights is None:
-#             weights = tf.ones_like(loc, dtype=tf.float64)
-#         self._weights_loc = weights
-#         self._weights_sum = z.reduce_sum(weights)
-#         self._latent_loc = loc
-#         params = {"scale": scale}
-#         dist_params = {"loc": loc, "scale": scale}
-#         super().__init__(distribution=kernel, dist_params=dist_params, obs=obs, params=params, dtype=ztypes.float,
-#                          name=name)
-#
-#     def _unnormalized_pdf(self, x: "zfit.Data", norm_range=False):
-#         value = znp.expand_dims(x.value(), -2)
-#         new_shape = znp.concatenate([tf.shape(value)[:2], [tf.shape(self._latent_loc)[0], 4]], axis=0)
-#         value = tf.broadcast_to(value, new_shape)
-#         probs = self.distribution.prob(value=value, name="unnormalized_pdf")
-#         # weights = znp.expand_dims(self._weights_loc, axis=-1)
-#         weights = self._weights_loc
-#         probs = z.reduce_sum(probs * weights, axis=-1) / self._weights_sum
-#         return probs
-#
-#     @supports()
-#     def _analytic_integrate(self, limits, norm_range):
-#         lower, upper = limits.limits
-#         if np.all(-np.array(lower) == np.array(upper)) and np.all(np.array(upper) == np.infty):
-#             return z.reduce_sum(self._weights_loc)  # tfp distributions are normalized to 1
-#         lower = z.to_real(lower[0], dtype=self.dtype)
-#         # lower = tf.broadcast_to(lower, shape=(tf.shape(self._latent_loc)[0], limits.n_obs,))  # remove
-#         upper = z.to_real(upper[0], dtype=self.dtype)
-#         integral = self.distribution.cdf(upper) - self.distribution.cdf(lower)
-#         integral = z.reduce_sum(integral * self._weights_loc, axis=-1) / self._weights_sum
-#         return integral  # TODO: generalize for VectorSpaces
 
 
 class Gauss(WrapDistribution, SerializableMixin):
@@ -252,8 +172,6 @@ class Gauss(WrapDistribution, SerializableMixin):
         mu, sigma = self._check_input_params_tfp(mu, sigma)
         params = {"mu": mu, "sigma": sigma}
 
-        def dist_params():
-            return {"loc": mu.value(), "scale": sigma.value()}
 
         distribution = tfp.distributions.Normal
         super().__init__(
@@ -338,8 +256,6 @@ class Uniform(WrapDistribution):
         low, high = self._check_input_params_tfp(low, high)
         params = {"low": low, "high": high}
 
-        def dist_params():
-            return {"low": low.value(), "high": high.value()}
 
         distribution = tfp.distributions.Uniform
         super().__init__(
@@ -397,13 +313,6 @@ class TruncatedGauss(WrapDistribution):
         params = {"mu": mu, "sigma": sigma, "low": low, "high": high}
         distribution = tfp.distributions.TruncatedNormal
 
-        def dist_params():
-            return {
-                "loc": mu.value(),
-                "scale": sigma.value(),
-                "low": low.value(),
-                "high": high.value(),
-            }
 
         super().__init__(
             distribution=distribution,
@@ -464,8 +373,6 @@ class Cauchy(WrapDistribution, SerializableMixin):
         params = {"m": m, "gamma": gamma}
         distribution = tfp.distributions.Cauchy
 
-        def dist_params():
-            return {"loc": m.value(), "scale": gamma.value()}
 
         super().__init__(
             distribution=distribution,
@@ -533,8 +440,6 @@ class Poisson(WrapDistribution, SerializableMixin):
         (lam,) = self._check_input_params_tfp(lam)
         params = {"lam": lam}
 
-        def dist_params():
-            return {"rate": lam.value()}
 
         distribution = tfp.distributions.Poisson
         super().__init__(
@@ -603,8 +508,6 @@ class LogNormal(WrapDistribution, SerializableMixin):
 
         params = {"mu": mu, "sigma": sigma}
 
-        def dist_params():
-            return {"loc": mu.value(), "scale": sigma.value()}
 
         distribution = tfp.distributions.LogNormal
         super().__init__(
@@ -677,8 +580,6 @@ class ChiSquared(WrapDistribution, SerializableMixin):
         (ndof,) = self._check_input_params_tfp(ndof)
         params = {"ndof": ndof}
 
-        def dist_params():
-            return {"df": ndof.value()}
 
         distribution = tfp.distributions.Chi2
         super().__init__(
@@ -771,8 +672,6 @@ class StudentT(WrapDistribution, SerializableMixin):
         ndof, mu, sigma = self._check_input_params_tfp(ndof, mu, sigma)
         params = {"ndof": ndof, "mu": mu, "sigma": sigma}
 
-        def dist_params():
-            return {"df": ndof.value(), "loc": mu.value(), "scale": sigma.value()}
 
         distribution = tfp.distributions.StudentT
         super().__init__(
@@ -894,19 +793,8 @@ class QGauss(WrapDistribution, SerializableMixin):
         z.assert_less(q, znp.asarray(3.0), "q must be < 3")
         params = {"q": q, "mu": mu, "sigma": sigma}
 
-        # https://en.wikipedia.org/wiki/Q-Gaussian_distribution
-        # relation to Student's t-distribution
 
-        # 1/(2 sigma^2) = 1 / (3 - q)
-        # 2 sigma^2 = 3 - q
-        # sigma = sqrt((3 - q)/2)
 
-        def dist_params(q=q, mu=mu, sigma=sigma):
-            z.assert_greater(q, znp.asarray(1.0), "q must be > 1")
-            z.assert_less(q, znp.asarray(3.0), "q must be < 3")
-            df = (3 - q.value()) / (q.value() - 1)
-            scale = sigma.value() / tf.sqrt(0.5 * (3 - q.value()))
-            return {"df": df, "loc": mu.value(), "scale": scale}
 
         distribution = tfp.distributions.StudentT
         super().__init__(
@@ -1005,17 +893,7 @@ class BifurGauss(WrapDistribution, SerializableMixin):
         mu, sigmal, sigmar = self._check_input_params_tfp(mu, sigmal, sigmar)
         params = {"mu": mu, "sigmal": sigmal, "sigmar": sigmar}
 
-        # sigmal = scale / skewness
-        # sigmar = scale * skewness
-        # scale = sigmal * skewness
-        # sigmar = sigmal * skewness^2
-        # skewness = sqrt(sigmar / sigmal)
-        # scale = sigmal * sqrt(sigmar / sigmal)
 
-        def dist_params():
-            scale = sigmal.value() * znp.sqrt(sigmar.value() / sigmal.value())
-            skewness = znp.sqrt(sigmar.value() / sigmal.value())
-            return {"loc": mu.value(), "scale": scale, "skewness": skewness}
 
         distribution = tfp.distributions.TwoPieceNormal
         super().__init__(
@@ -1113,15 +991,7 @@ class Gamma(WrapDistribution, SerializableMixin):
         gamma, beta, mu = self._check_input_params_tfp(gamma, beta, mu)
         params = {"gamma": gamma, "beta": beta, "mu": mu}
 
-        def dist_params():
-            return {"concentration": gamma.value(), "rate": 1 / beta.value(), "loc": mu.value()}
 
-        def distribution(concentration, rate, loc, name):
-            return tfd.TransformedDistribution(
-                distribution=tfp.distributions.Gamma(concentration, rate),
-                bijector=tfp.bijectors.Shift(loc),
-                name=name,
-            )
 
         super().__init__(
             distribution=distribution,
@@ -1227,8 +1097,6 @@ class JohnsonSU(WrapDistribution, SerializableMixin):
         mu, lambd, gamma, delta = self._check_input_params_tfp(mu, lambd, gamma, delta)
         params = {"mu": mu, "lambd": lambd, "gamma": gamma, "delta": delta}
 
-        def dist_params():
-            return {"skewness": gamma.value(), "tailweight": delta.value(), "loc": mu.value(), "scale": lambd.value()}
 
         distribution = tfp.distributions.JohnsonSU
         super().__init__(
@@ -1324,8 +1192,6 @@ class GeneralizedGauss(WrapDistribution, SerializableMixin):
         mu, sigma, beta = self._check_input_params_tfp(mu, sigma, beta)
         params = {"mu": mu, "sigma": sigma, "beta": beta}
 
-        def dist_params():
-            return {"loc": mu.value(), "scale": sigma.value(), "power": beta.value()}
 
         distribution = tfp.distributions.GeneralizedNormal
         super().__init__(
@@ -1427,8 +1293,6 @@ class ExpModGauss(WrapDistribution, SerializableMixin):
         mu, sigma, lambd = self._check_input_params_tfp(mu, sigma, lambd)
         params = {"mu": mu, "sigma": sigma, "lambd": lambd}
 
-        def dist_params():
-            return {"loc": mu.value(), "scale": sigma.value(), "rate": lambd.value()}
 
         distribution = tfp.distributions.ExponentiallyModifiedGaussian
         super().__init__(
@@ -1515,8 +1379,6 @@ class Beta(WrapDistribution, SerializableMixin):
         alpha, beta = self._check_input_params_tfp(alpha, beta)
         params = {"alpha": alpha, "beta": beta}
 
-        def dist_params():
-            return {"concentration1": alpha.value(), "concentration0": beta.value()}
 
         distribution = tfp.distributions.Beta
         super().__init__(
@@ -1612,9 +1474,6 @@ class BifurKappa(WrapDistribution, SerializableMixin):
         mu, kappa = self._check_input_params_tfp(mu, kappa)
         params = {"mu": mu, "kappa": kappa}
 
-        def dist_params():
-            scale = kappa.value() * znp.sqrt(2 / znp.pi)
-            return {"loc": mu.value(), "scale": scale}
 
         distribution = tfp.distributions.Normal
         super().__init__(

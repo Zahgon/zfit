@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -17,25 +16,10 @@ class UnbinnedData(tfp.experimental.AutoCompositeTensor, ZfitData):
         self._space = space
         self._weights = weights
 
-    @property
-    def is_binned(self):
-        return False
 
-    @property
-    def is_unbinned(self):
-        return True
 
-    @property
-    def space(self):
-        return self._space
 
-    @property
-    def data(self):
-        return self._data
 
-    @property
-    def weights(self):
-        return self._weights
 
     def values(self):
         return self.data
@@ -51,9 +35,5 @@ class UnbinnedData(tfp.experimental.AutoCompositeTensor, ZfitData):
             raise KeyError(msg)
         return self.data[..., index]
 
-    @property
-    def has_weights(self):
-        return self._weights is not None
 
 
-# tensorlike.register_tensor_conversion(UnbinnedData, name='UnbinnedData', overload_operators=True)

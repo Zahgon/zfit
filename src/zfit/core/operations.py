@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -33,11 +32,9 @@ def multiply(object1: ztyping.BaseObjectType, object2: ztyping.BaseObjectType) -
     Raises:
         TypeError: if one of the objects is neither a ZfitFunc, ZfitPDF or convertable to a ZfitParameter
     """
-    # converting the objects to known types
     object1, object2 = _convert_to_known(object1, object2)
     new_object = None
 
-    # object 1 is ZfitParameter
     if isinstance(object1, ZfitParameter):
         if isinstance(object2, ZfitParameter):
             new_object = multiply_param_param(param1=object1, param2=object2)
@@ -50,7 +47,6 @@ def multiply(object1: ztyping.BaseObjectType, object2: ztyping.BaseObjectType) -
             msg = "This code should never be reached due to logical reasons. Mistakes happen..."
             raise AssertionError(msg)
 
-    # object 1 is Function
     elif isinstance(object1, ZfitFunc):
         if isinstance(object2, ZfitParameter):
             new_object = multiply_param_func(param=object2, func=object1)
@@ -60,7 +56,6 @@ def multiply(object1: ztyping.BaseObjectType, object2: ztyping.BaseObjectType) -
             msg = "Cannot multiply a function with a model. Use `func.as_pdf` or `model.as_func`."
             raise ModelIncompatibleError(msg)
 
-    # object 1 is PDF
     elif isinstance(object1, ZfitPDF) and isinstance(object2, ZfitPDF):
         new_object = multiply_pdf_pdf(pdf1=object1, pdf2=object2)
 
@@ -106,8 +101,6 @@ def multiply_param_func(param: ZfitParameter, func: ZfitFunc) -> ZfitFunc:
         raise TypeError(msg)
     from ..models.functions import SimpleFuncV1  # noqa: PLC0415
 
-    def combined_func(x):
-        return param * func.func(x=x)
 
     params = {param.name: param}
     params.update(func.params)
@@ -121,7 +114,6 @@ def multiply_param_param(param1: ZfitParameter, param2: ZfitParameter) -> ZfitPa
     return znp.multiply(param1, param2)
 
 
-# Addition logic
 def add(object1: ztyping.BaseObjectType, object2: ztyping.BaseObjectType) -> ztyping.BaseObjectType:
     """Add two objects and return a new object (may depending on the old).
 
@@ -129,17 +121,13 @@ def add(object1: ztyping.BaseObjectType, object2: ztyping.BaseObjectType) -> zty
         object1: A ZfitParameter, ZfitFunc or ZfitPDF to add with object2
         object2: A ZfitParameter, ZfitFunc or ZfitPDF to add with object1
     """
-    # converting the objects to known types
     object1, object2 = _convert_to_known(object1, object2)
     new_object = None
-    # convert anything we can, otherwise raise an FunctionNotImplemented error
 
-    # object 1 is ZfitParameter
     if isinstance(object1, ZfitParameter):
         if isinstance(object2, ZfitFunc):
             new_object = add_param_func(param=object1, func=object2)
 
-    # object 1 is Function
     elif isinstance(object1, ZfitFunc):
         if isinstance(object2, ZfitParameter):
             new_object = add_param_func(param=object2, func=object1)
@@ -149,7 +137,6 @@ def add(object1: ztyping.BaseObjectType, object2: ztyping.BaseObjectType) -> zty
             msg = "Cannot add a function with a model. Use `func.as_pdf` or `model.as_func`."
             raise TypeError(msg)
 
-    # object 1 is PDF
     elif isinstance(object1, ZfitPDF):
         if isinstance(object2, ZfitFunc):
             msg = "Cannot add a function with a model. Use `func.as_pdf` or `model.as_func`."
@@ -213,36 +200,9 @@ def add_param_func(param: ZfitParameter, func: ZfitFunc) -> ZfitFunc:
     raise NotImplementedError(msg)  # TODO: implement with new parameters
 
 
-def add_param_param(param1: ZfitParameter, param2: ZfitParameter) -> ZfitParameter:
-    if not (isinstance(param1, ZfitParameter) and isinstance(param2, ZfitParameter)):
-        msg = f"`param1` and `param2` need to be `ZfitParameter` and not {param1}, {param2}"
-        raise TypeError(msg)
-    # use the default behavior of variables
-    return znp.add(param1, param2)
 
 
-# Conversions
 
 
-def convert_pdf_to_func(pdf: ZfitPDF, norm: ztyping.LimitsType) -> ZfitFunc:
-    def value_func(x):
-        return pdf.pdf(x, norm=norm)
-
-    from ..models.functions import SimpleFuncV1  # noqa: PLC0415
-
-    return SimpleFuncV1(func=value_func, obs=pdf.obs, name=pdf.name + "_as_func", **pdf.params)
 
 
-def convert_func_to_pdf(func: ZfitFunc | Callable, obs=None, name=None) -> ZfitPDF:
-    func_name = "autoconverted_func_to_pdf" if name is None else name
-    if not isinstance(func, ZfitFunc) and callable(func):
-        if obs is None:
-            msg = "If `func` is a function, `obs` has to be specified."
-            raise ValueError(msg)
-        from ..models.functions import SimpleFuncV1  # noqa: PLC0415
-
-        func = SimpleFuncV1(func=func, obs=obs, name=func_name)
-    from ..models.special import SimplePDF  # noqa: PLC0415
-
-    name = func.name if name is None else func_name
-    return SimplePDF(func=func.func, obs=func.obs, name=name, **func.params)

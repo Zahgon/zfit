@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -66,9 +65,6 @@ class SplinePDF(BaseFunctor):
             order = 3
         self._order = order
 
-    @property
-    def order(self):
-        return self._order
 
     @supports(norm=True)
     def _ext_pdf(self, x, norm):
@@ -80,7 +76,6 @@ class SplinePDF(BaseFunctor):
         centers_list = znp.meshgrid(*pdf.space.binning.centers, indexing="ij")
         centers_list_flat = [znp.reshape(cent, (-1,)) for cent in centers_list]
         centers = znp.stack(centers_list_flat, axis=-1)
-        # [None, :, None]  # TODO: only 1 dim now
         probs = interpolate_spline(
             train_points=centers[None, ...],
             train_values=density_flat[None, :, None],

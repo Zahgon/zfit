@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -50,7 +49,6 @@ def extract_daughter_input_obs(obs: ztyping.ObsTypeInput, spaces: Iterable[ZfitS
     Returns:
     """
     spaces = convert_to_container(spaces)
-    # combine spaces and limits
     try:
         models_space = combine_spaces(*spaces)
     except LimitsIncompatibleError:  # then only add obs
@@ -61,8 +59,6 @@ def extract_daughter_input_obs(obs: ztyping.ObsTypeInput, spaces: Iterable[ZfitS
         obs = models_space
     else:
         obs = obs if isinstance(obs, Space) else Space(obs=obs)
-        # if not frozenset(obs.obs) == frozenset(models_space.obs):  # not needed, example projection
-        #     raise SpaceIncompatibleError("The given obs do not coincide with the obs from the daughter models.")
         if obs.obs != models_space.obs and not obs.limits_are_set:
             obs = models_space.with_obs(obs.obs)
 
@@ -77,7 +73,6 @@ class FunctorMixin(ZfitFunctorMixin):
         self._model_obs = tuple(model.obs for model in models)
         self._models = models
         super().__init__(obs=obs, **kwargs)
-        # TODO: needed? remove below
 
     def _get_params(
         self,
@@ -101,35 +96,10 @@ class FunctorMixin(ZfitFunctorMixin):
 
     @property
     def models(self) -> list[ZfitModel]:
-        """Return the models of this `Functor`.
+        pass
 
-        Can be `pdfs` or `funcs`.
-        """
-        return list(self._models)
 
-    @property
-    def _model_same_obs(self) -> bool:
-        return get_same_obs(self._model_obs)
 
-    def get_models(self, names=None) -> list[ZfitModel]:
-        if names is None:
-            models = list(self.models)
-        else:
-            msg = "name not supported currently."
-            raise ValueError(msg)
-            # models = [self.models[name] for name in names]
-        return models
-
-    @deprecated_norm_range
-    def _check_input_norm_default(self, norm, caller_name="", none_is_error=True):
-        del caller_name  # unused
-        if norm is None:
-            try:
-                norm = self.norm_range
-            except AttributeError as error:
-                msg = "The normalization range is `None`, no default norm is set"
-                raise NormRangeNotSpecifiedError(msg) from error
-        return self._check_input_norm_range(norm=norm, none_is_error=none_is_error)
 
 
 class FunctorPDFRepr(BasePDFRepr):
@@ -137,14 +107,6 @@ class FunctorPDFRepr(BasePDFRepr):
     pdfs: list[Serializer.types.PDFTypeDiscriminated]
     obs: SpaceRepr | None = None
 
-    @pydantic.root_validator(pre=True)
-    def validate_all_functor(cls, values):
-        if cls.orm_mode(values):
-            init = values["hs3"].original_init
-            values = dict(values)
-            values["obs"] = init["obs"]
-            values["extended"] = init["extended"]
-        return values
 
 
 def _extract_common_obs(obs: tuple[tuple[str, ...] | Space, ...]) -> tuple[str, ...]:
@@ -167,7 +129,6 @@ def _preprocess_init_sum(fracs, obs, pdfs):
     if any(frozenset(pdf.obs) != frozenset(common_obs) for pdf in pdfs):
         msg = "Currently, sums are only supported in the same observables"
         raise ObsIncompatibleError(msg)
-    # check if all extended
     are_extended = [pdf.is_extended for pdf in pdfs]
     all_extended = all(are_extended)
     no_extended = not any(are_extended)
@@ -185,15 +146,11 @@ def _preprocess_init_sum(fracs, obs, pdfs):
             f" be a not extended SumPDF.",
             identifier="sum_extended_frac",
         )
-    # catch if args don't fit known case
     if fracs:
-        # create fracs if one is missing
         if len(fracs) == len(pdfs) - 1:
             frac_param_created = True
             frac_params_tmp = {f"frac_{i}": frac for i, frac in enumerate(fracs)}
 
-            def remaining_frac_func(params):
-                return tf.constant(1.0, dtype=ztypes.float) - tf.add_n(list(params.values()))
 
             remaining_frac = convert_to_parameter(remaining_frac_func, params=frac_params_tmp)
             z.assert_non_negative(
@@ -201,11 +158,9 @@ def _preprocess_init_sum(fracs, obs, pdfs):
                 f"The remaining fraction is negative, the sum of fracs is > 0. Fracs: {fracs}",
             )  # check fractions
 
-            # IMPORTANT to change the name! Otherwise, recursion due to namespace capture in the lambda
             fracs_cleaned = [*fracs, remaining_frac]
 
         elif len(fracs) == len(pdfs):
-            # skip if deserializing, this is fine, we know what we're doing
             if Serializer._existing_params is None:  # todo: make a better context for serialization/deserialization
                 warn_changed_feature(
                     "A SumPDF with the number of fractions equal to the number of pdf will no longer "
@@ -223,13 +178,10 @@ def _preprocess_init_sum(fracs, obs, pdfs):
             )
             raise ModelIncompatibleError(msg)
         param_fracs = fracs_cleaned
-    # for the extended case, take the yields, normalize them, in case no fracs are given.
     sum_yields = None
     if all_extended and not fracs:
         yields = [pdf.get_yield() for pdf in pdfs]
 
-        def sum_yields_func(params):
-            return znp.sum(list(params.values()))
 
         sum_yields = convert_to_parameter(sum_yields_func, params={f"yield_{i}": y for i, y in enumerate(yields)})
         yield_fracs = [

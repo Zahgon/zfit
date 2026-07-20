@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -212,7 +211,6 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
         self._conv_interpolation = interpolation
         self._conv_spline_order = spline_order
 
-        # get function limits
         if limits_func is None:
             limits_func = func.space
         limits_func = self._check_input_limits(limits=limits_func)
@@ -223,7 +221,6 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
             msg = "Multiple Limits not implemented"
             raise WorkInProgressError(msg)
 
-        # get kernel limits
         if limits_kernel is None:
             limits_kernel = kernel.space
         limits_kernel = self._check_input_limits(limits=limits_kernel)
@@ -264,7 +261,6 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
         lower_sample = lower_func + lower_kernel
         upper_sample = upper_func + upper_kernel  # todo: debug, check shapes of limits
 
-        # TODO: what if kernel area is larger?
         if limits_kernel.volume > limits_func.volume:
             msg = (
                 "Currently, only kernels that are smaller than the func are supported."
@@ -272,29 +268,15 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
             )
             raise WorkInProgressError(msg)
 
-        # get the finest resolution. Find the dimensions with the largest kernel-space to func-space ratio
-        # We take the binwidth of the kernel as the overall binwidth and need to have the same binning in
-        # the function as well
         area_ratios = (upper_sample - lower_sample) / (limits_kernel.v0.upper - limits_kernel.v0.lower)
         nbins_func_exact_max = znp.max(area_ratios * n)
         nbins_func = znp.ceil(nbins_func_exact_max)  # plus one and floor is like ceiling (we want more bins) with the
-        # guarantee that we add one bin (e.g. if we hit exactly the boundaries, we add one.
         nbins_kernel = n
-        # n = max(n, npoints_scaling)
-        # TODO: below needed if we try to estimate the number of points
-        # tf.assert_less(
-        #     n - 1,  # so that for three dimension it's 999'999, not 10^6
-        #     znp.asarray(1e6, tf.int32),
-        #     message="Number of points automatically calculated to be used for the FFT"
-        #     " based convolution exceeds 1e6. If you want to use this number - "
-        #     "or an even higher value - use explicitly the `n` argument.",
-        # )
 
         binwidth = (upper_kernel - lower_kernel) / nbins_kernel
         to_extend = (
             binwidth * nbins_func - (upper_sample - lower_sample)
         ) / 2  # how much we need to extend the func_limits
-        # on each side in order to match the binwidth of the kernel
         lower_sample -= to_extend
         upper_sample += to_extend
 
@@ -338,26 +320,16 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
         y_func = znp.reshape(y_func, func_dims)
         y_kernel = znp.reshape(y_kernel, kernel_dims)
 
-        # flip the kernel to use the cross-correlation called `convolution function from TF
-        # convolution = cross-correlation with flipped kernel
-        # this introduces a shift and has to be corrected when interpolating/x_func
-        # because the convolution has to be independent of the kernes **limits**
-        # We assume they are symmetric when doing the FFT, so shift them back.
         y_kernel = tf.reverse(y_kernel, axis=range(self.n_obs))
         kernel_shift = (upper_kernel + lower_kernel) / 2
         x_func += kernel_shift
         lower_func += kernel_shift
         upper_func += kernel_shift
 
-        # make rectangular grid
         y_func_rect = znp.reshape(y_func, func_dims)
         y_kernel_rect = znp.reshape(y_kernel, kernel_dims)
 
-        # needed for multi dims?
-        # if self.n_obs == 2:
-        #     y_kernel_rect = tf.linalg.adjoint(y_kernel_rect)
 
-        # get correct shape for tf.nn.convolution
         y_func_rect_conv = znp.reshape(y_func_rect, (1, *func_dims, 1))
         y_kernel_rect_conv = znp.reshape(y_kernel_rect, (*kernel_dims, 1, 1))
 
@@ -368,14 +340,6 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
             padding="SAME",
         )
 
-        # needed for multidims?
-        # if self.n_obs == 2:
-        #     conv = tf.linalg.adjoint(conv[0, ..., 0])[None, ..., None]
-        # conv = scipy.signal.convolve(
-        #     y_func_rect,
-        #     y_kernel_rect,
-        #     mode='same'
-        # )[None, ..., None]
         train_points = znp.expand_dims(x_func, axis=0)
         query_points = znp.expand_dims(x.value(), axis=0)
         if self.conv_interpolation == "spline":
@@ -393,31 +357,15 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
                 x_ref_min=lower_func[..., 0],
                 x_ref_max=upper_func[..., 0],
                 y_ref=conv[0, ..., 0],
-                # y_ref=tf.reverse(conv[0, ..., 0], axis=[0]),
                 axis=0,
             )
             prob = prob[0]
 
         return prob
 
-    @property
-    def conv_interpolation(self):
-        return self._conv_interpolation
 
     @supports()
     def _sample(self, n, limits):
-        # this is a custom implementation of sampling. Since the kernel and func are not correlated,
-        # we can simply sample from both and add them. This is "trivial" compared to accept reject sampling
-        # However, one large pitfall is that we cannot simply request n events from each pdf and then add them.
-        # The kernel can move points out of the limits that we want, since it's "smearing" it.
-        # E.g. with x sampled between limits, x + xkernel can be outside of limits.
-        # Therefore we need to (repeatedly) sample from a) the func in the range of limits +
-        # the kernel limits; to extend limits in the upper direction with the kernel upper limits and vice versa.
-        # Therefore we (ab)use the accept reject sample: it samples until it is full. Everything has a constant
-        # probability to be accepted.
-        # This is maybe not the most efficient way to do and a more specialized (meaning taking care of less
-        # special cases such as `accept_reject_sample` does) can be more efficient. However, sampling is not
-        # supposed to be the bottleneck anyway.
         func = self.pdfs[0]
         kernel = self.pdfs[1]
 
@@ -430,7 +378,6 @@ class FFTConvPDFV1(BaseFunctor, SerializableMixin):
 
         return accept_reject_sample(
             lambda x: tf.ones(shape=tf.shape(x.value())[0], dtype=self.dtype),  # use inside?
-            # all the points are inside
             n=n,
             limits=limits,
             sample_and_weights_factory=lambda: sample_and_weights,
@@ -452,13 +399,6 @@ class FFTConvPDFV1Repr(BasePDFRepr):
     interpolation: str | None = None
     obs: SpaceRepr | None = None
 
-    @pydantic.root_validator(pre=True)
-    def validate_all(cls, values):
-        values = dict(values)
-        if cls.orm_mode(values):
-            for k, v in values["hs3"].original_init.items():
-                values[k] = v
-        return values
 
 
 class AddingSampleAndWeights:

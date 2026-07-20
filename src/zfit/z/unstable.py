@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -70,12 +69,6 @@ def expand_dims(input, axis) -> tf.Tensor:
     return np.expand_dims(input, axis)
 
 
-def reduce_prod(input_tensor, axis=None, keepdims=None) -> tf.Tensor:
-    if not SWITCH_ON or has_tensor(input_tensor):
-        return znp.prod(input_tensor, axis, keepdims=keepdims)
-    elif keepdims is None:
-        return np.prod(input_tensor, axis)
-    return np.prod(input_tensor, axis, keepdims=keepdims)
 
 
 def equal(x, y) -> tf.Tensor:
@@ -143,19 +136,3 @@ def concat(values, axis) -> tf.Tensor:
     return np.concatenate(values, axis=axis)
 
 
-def _try_convert_numpy(tensorlike) -> np.ndarray:
-    if hasattr(tensorlike, "numpy"):
-        tensorlike = tensorlike.numpy()
-
-    if not isinstance(tensorlike, np.ndarray):
-        from zfit.util.exception import CannotConvertToNumpyError  # noqa: PLC0415
-
-        msg = (
-            f"Cannot convert {tensorlike} to a Numpy array. This may be because the"
-            f" object is a Tensor and the function is called in Graph mode (e.g. in"
-            f"a `z.function` decorated function.\n"
-            f"If this error appears and is not understandable, it is most likely a bug."
-            f" Please open an issue on Github."
-        )
-        raise CannotConvertToNumpyError(msg)
-    return tensorlike

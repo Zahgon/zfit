@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -15,14 +14,8 @@ if typing.TYPE_CHECKING:
     import zfit  # noqa: F401
 
 
-def to_value_holder(var):
-    if not isinstance(var, ValueHolder):
-        var = ValueHolder(var)
-    return var
 
 
-def to_data(value, space):
-    return Data.from_tensor(obs=space, tensor=value)  # TODO
 
 
 class Func(ZfitFunc):

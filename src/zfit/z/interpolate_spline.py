@@ -1,19 +1,3 @@
-#  Copyright (c) 2025 zfit
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ==============================================================================
-# This was copied from TensorFlow addons, which is deprecated by now.
-"""Polyharmonic spline interpolation."""
 
 from __future__ import annotations
 
@@ -62,14 +46,11 @@ def _cross_squared_distance_matrix(x: TensorLike, y: TensorLike) -> tf.Tensor:
     x_norm_squared = tf.reduce_sum(tf.square(x), 2)
     y_norm_squared = tf.reduce_sum(tf.square(y), 2)
 
-    # Expand so that we can broadcast.
     x_norm_squared_tile = tf.expand_dims(x_norm_squared, 2)
     y_norm_squared_tile = tf.expand_dims(y_norm_squared, 1)
 
     x_y_transpose = tf.matmul(x, y, adjoint_b=True)
 
-    # squared_dists[b,i,j] = ||x_bi - y_bj||^2 =
-    # x_bi'x_bi- 2x_bi'x_bj + x_bj'x_bj
     return x_norm_squared_tile - 2 * x_y_transpose + y_norm_squared_tile
 
 
@@ -91,8 +72,6 @@ def _pairwise_squared_distance_matrix(x: TensorLike) -> tf.Tensor:
     x_norm_squared = tf.linalg.diag_part(x_x_transpose)
     x_norm_squared_tile = tf.expand_dims(x_norm_squared, 2)
 
-    # squared_dists[b,i,j] = ||x_bi - x_bj||^2 =
-    # = x_bi'x_bi- 2x_bi'x_bj + x_bj'x_bj
     return x_norm_squared_tile - 2 * x_x_transpose + tf.transpose(x_norm_squared_tile, [0, 2, 1])
 
 
@@ -121,7 +100,6 @@ def _solve_interpolation(
       ValueError: if d or k is not fully specified.
     """
 
-    # These dimensions are set dynamically at runtime.
     b, n, _ = tf.unstack(tf.shape(train_points), num=3)
 
     d = train_points.shape[-1]
@@ -134,27 +112,19 @@ def _solve_interpolation(
         msg = "The dimensionality of the output values (k) must be statically-inferrable."
         raise ValueError(msg)
 
-    # First, rename variables so that the notation (c, f, w, v, A, B, etc.)
-    # follows https://en.wikipedia.org/wiki/Polyharmonic_spline.
-    # To account for python style guidelines we use
-    # matrix_a for A and matrix_b for B.
 
     c = train_points
     f = train_values
 
-    # Next, construct the linear system.
     with tf.name_scope("construct_linear_system"):
         matrix_a = _phi(_pairwise_squared_distance_matrix(c), order)  # [b, n, n]
         if regularization_weight > 0:
             batch_identity_matrix = tf.expand_dims(tf.eye(n, dtype=c.dtype), 0)
             matrix_a += regularization_weight * batch_identity_matrix
 
-        # Append ones to the feature values for the bias term
-        # in the linear model.
         ones = tf.ones_like(c[..., :1], dtype=c.dtype)
         matrix_b = tf.concat([c, ones], 2)  # [b, n, d + 1]
 
-        # [b, n + d + 1, n]
         left_block = tf.concat([matrix_a, tf.transpose(matrix_b, [0, 2, 1])], 1)
 
         num_b_cols = matrix_b.get_shape()[2]  # d + 1
@@ -165,7 +135,6 @@ def _solve_interpolation(
         rhs_zeros = tf.zeros([b, d + 1, k], train_points.dtype)
         rhs = tf.concat([f, rhs_zeros], 1)  # [b, n + d + 1, k]
 
-    # Then, solve the linear system and unpack the results.
     with tf.name_scope("solve_linear_system"):
         w_v = tf.linalg.solve(lhs, rhs)
         w = w_v[:, :n, :]
@@ -198,14 +167,11 @@ def _apply_interpolation(
       Polyharmonic interpolation evaluated at points defined in `query_points`.
     """
 
-    # First, compute the contribution from the rbf term.
     pairwise_dists = _cross_squared_distance_matrix(query_points, train_points)
     phi_pairwise_dists = _phi(pairwise_dists, order)
 
     rbf_term = tf.matmul(phi_pairwise_dists, w)
 
-    # Then, compute the contribution from the linear term.
-    # Pad query_points with ones, for the bias term in the linear model.
     query_points_pad = tf.concat([query_points, tf.ones_like(query_points[..., :1], train_points.dtype)], 2)
     linear_term = tf.matmul(query_points_pad, v)
 
@@ -225,8 +191,6 @@ def _phi(r: FloatTensorLike, order: int) -> FloatTensorLike:
       `phi_k` evaluated coordinate-wise on `r`, for `k = r`.
     """
 
-    # using EPSILON prevents log(0), sqrt0), etc.
-    # sqrt(0) is well-defined, but its gradient is not
     with tf.name_scope("phi"):
         if order == 1:
             r = tf.maximum(r, EPSILON)
@@ -311,11 +275,9 @@ def interpolate_spline(
         train_values = tf.convert_to_tensor(train_values)
         query_points = tf.convert_to_tensor(query_points)
 
-        # First, fit the spline to the observed data.
         with tf.name_scope("solve"):
             w, v = _solve_interpolation(train_points, train_values, order, regularization_weight)
 
-        # Then, evaluate the spline at the query locations.
         with tf.name_scope("predict"):
             query_values = _apply_interpolation(query_points, train_points, w, v, order)
 

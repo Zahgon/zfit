@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -40,7 +39,6 @@ def _spd_transform(values, probs, variances):
     Returns:
         The transformed probabilities and values.
     """
-    # Scaled Poisson distribution from Bohm and Zech, NIMA 748 (2014) 1-6
     scale = znp.maximum(values * tf.math.reciprocal_no_nan(variances), znp.ones_like(values))
     probs = probs * scale
     values = values * scale
@@ -60,8 +58,6 @@ def poisson_loss_calc(probs, values, log_offset=None, variances=None):
     Returns:
         The Poisson log probability for the given data.
     """
-    # Optional variances of the data. If not None, the Poisson loss is calculated using the
-    #             scaled Poisson distribution from Bohm and Zech, NIMA 748 (2014) 1-6
     if log_offset is None:
         log_offset = False
     use_offset = log_offset is not False
@@ -75,10 +71,6 @@ def poisson_loss_calc(probs, values, log_offset=None, variances=None):
         compute_full_loss=not use_offset,  # TODO: correct offset
     )  # TODO: optimization?
 
-    # cross-check
-    # import tensorflow_probability as tfp
-    # poisson_dist = tfp.distributions.Poisson(rate=probs)
-    # poisson_term = -poisson_dist.log_prob(values)
     if use_offset:
         log_offset = znp.asarray(log_offset, dtype=znp.float64)
         poisson_term += log_offset
@@ -97,7 +89,6 @@ class BaseBinned(BaseLoss):
         data = convert_to_container(data)
         from zfit._data.binneddatav1 import BinnedData  # noqa: PLC0415
 
-        # Check for empty model or data lists
         if not model:
             msg = "At least one model must be provided to create a binned loss."
             raise ValueError(msg)
@@ -114,7 +105,6 @@ class BaseBinned(BaseLoss):
             for d in data
         ]
 
-        # Check for empty datasets
         for i, dat in enumerate(data):
             if hasattr(dat, "num_entries"):
                 try:
@@ -131,7 +121,6 @@ class BaseBinned(BaseLoss):
                         )
                         raise ValueError(msg)
                 except Exception:
-                    # Continue if we can't determine entries
                     pass
 
         not_binned_pdf = [mod for mod in model if not isinstance(mod, ZfitBinnedPDF)]
@@ -167,74 +156,7 @@ class BaseBinned(BaseLoss):
         constraints: ConstraintsInputType | NotSpecified = NONE,
         options: OptionsInputType | NotSpecified = NONE,
     ):
-        r"""Create a new binned loss of this type. This is preferrable over creating a new instance in most cases.
-
-        Internals, such as certain optimizations will be shared and therefore the loss is made comparable.
-
-        If something is not given, it will be taken from the current loss.
-
-        Args:
-            model: |@doc:loss.binned.init.model| Binned PDF(s) that return the normalized probability
-               (``rel_counts`` or ``counts``) for
-               *data* under the given parameters.
-               If multiple model and data are given, they will be used
-               in the same order to do a simultaneous fit. |@docend:loss.binned.init.model|
-            data: |@doc:loss.binned.init.data| Binned dataset that will be given to the *model*.
-               If multiple model and data are given, they will be used
-               in the same order to do a simultaneous fit. |@docend:loss.binned.init.data|
-            constraints: |@doc:loss.init.constraints| Auxiliary measurements ("constraints")
-               that add a likelihood term to the loss.
-
-               .. math::
-                 \mathcal{L}(\theta) = \mathcal{L}_{unconstrained} \prod_{i} f_{constr_i}(\theta)
-
-               Usually, an auxiliary measurement -- by its very nature -S  should only be added once
-               to the loss. zfit does not automatically deduplicate constraints if they are given
-               multiple times, leaving the freedom for arbitrary constructs.
-
-               Constraints can also be used to restrict the loss by adding any kinds of penalties. |@docend:loss.init.constraints|
-            options: |@doc:loss.init.options| Additional options (as a dict) for the loss.
-               Current possibilities include:
-
-               - 'subtr_const' (default True): subtract from each points
-                 log probability density a constant that
-                 is approximately equal to the average log probability
-                 density in the very first evaluation before
-                 the summation. This brings the initial loss value closer to 0 and increases,
-                 especially for large datasets, the numerical stability.
-
-                 The value will be stored ith 'subtr_const_value' and can also be given
-                 directly.
-
-                 The subtraction should not affect the minimum as the absolute
-                 value of the NLL is meaningless. However,
-                 with this switch on, one cannot directly compare
-                 different likelihoods absolute value as the constant
-                 may differ! Use ``create_new`` in order to have a comparable likelihood
-                 between different losses or use the ``full`` argument in the value function
-                 to calculate the full loss with all constants.
-
-
-               These settings may extend over time. In order to make sure that a loss is the
-               same under the same data, make sure to use ``create_new`` instead of instantiating
-               a new loss as the former will automatically overtake any relevant constants
-               and behavior. |@docend:loss.init.options|
-
-        Returns:
-        """
-        if model is NONE:
-            model = self.model
-        if data is NONE:
-            data = self.data
-        if constraints is NONE:
-            constraints = self.constraints
-            if constraints is not None:
-                constraints = constraints.copy()
-        if options is NONE:
-            options = self._options
-            if isinstance(options, dict):
-                options = options.copy()
-        return type(self)(model=model, data=data, constraints=constraints, options=options)
+        pass
 
 
 class ExtendedBinnedNLL(BaseBinned):
@@ -323,8 +245,6 @@ class ExtendedBinnedNLL(BaseBinned):
                and behavior. |@docend:loss.init.options|
         """
 
-        # readd below if fixed
-        #     |@doc:loss.init.explain.spdtransform| A scaled Poisson
         self._errordef = 0.5
         super().__init__(model=model, data=data, constraints=constraints, options=options)
 
@@ -341,7 +261,6 @@ class ExtendedBinnedNLL(BaseBinned):
         poisson_terms = []
         for mod, dat in zip(model, data, strict=True):
             values = dat.values(  # TODO: right order of model and data?
-                # obs=mod.obs
             )
             variances = dat.variances()
             probs = mod.counts(dat)
@@ -360,9 +279,6 @@ class ExtendedBinnedNLL(BaseBinned):
 
         return nll
 
-    @property
-    def is_extended(self):
-        return True
 
     def _get_params(
         self,
@@ -462,8 +378,6 @@ class BinnedNLL(BaseBinned):
                and behavior. |@docend:loss.init.options|
         """
 
-        # readd below if fixed
-        #            |@doc:loss.init.explain.spdtransform| A scaled Poisson distribution is...
         self._errordef = 0.5
         super().__init__(model=model, data=data, constraints=constraints, options=options)
         extended_pdfs = [pdf for pdf in self.model if pdf.is_extended]
@@ -489,7 +403,6 @@ class BinnedNLL(BaseBinned):
         poisson_terms = []
         for mod, dat in zip(model, data, strict=True):
             values = dat.values(  # TODO: right order of model and data?
-                # obs=mod.obs
             )
             variances = dat.variances()
             probs = mod.rel_counts(dat)
@@ -509,9 +422,6 @@ class BinnedNLL(BaseBinned):
 
         return nll
 
-    @property
-    def is_extended(self):
-        return False
 
     def _get_params(
         self,
@@ -694,7 +604,6 @@ class BinnedChi2(BaseBinned):
 
         for mod, dat in zip(model, data, strict=True):
             values = dat.values(  # TODO: right order of model and data?
-                # obs=mod.obs
             )
             probs = mod.rel_counts(dat)
             probs *= znp.sum(values)
@@ -720,9 +629,6 @@ class BinnedChi2(BaseBinned):
 
         return chi2_term
 
-    @property
-    def is_extended(self):
-        return False
 
     def _get_params(
         self,
@@ -848,7 +754,6 @@ class ExtendedBinnedChi2(BaseBinned):
         log_offset_val = znp.asarray(log_offset_val, dtype=znp.float64)
         for mod, dat in zip(model, data, strict=True):
             values = dat.values(  # TODO: right order of model and data?
-                # obs=mod.obs
             )
             probs = mod.counts(dat)
             variance_method = self._options.get("errors")
@@ -873,6 +778,3 @@ class ExtendedBinnedChi2(BaseBinned):
 
         return chi2_term
 
-    @property
-    def is_extended(self):
-        return True

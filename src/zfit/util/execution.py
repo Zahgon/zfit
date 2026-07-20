@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -40,23 +39,12 @@ class RunManager:
         self.set_n_cpu(n_cpu=n_cpu)
         self._hashing_enabled = True
 
-        # TODO: keep this?
         self._enable_parameter_autoconversion = True
 
-        # set default values
         self.chunking.active = False  # not yet implemented the chunking...
         self.chunking.max_n_points = 1000000
 
-    @property
-    def mode(self):
-        return self._mode
 
-    @property
-    def chunksize(self):
-        if self.chunking.active:
-            return self.chunking.max_n_points
-        else:
-            return self.MAX_CHUNK_SIZE
 
     @property
     def check_numerics(self):
@@ -66,9 +54,6 @@ class RunManager:
     def check_numerics(self, value):
         self.numeric_checks = value
 
-    @property
-    def n_cpu(self):
-        return len(self._cpu)
 
     def set_n_cpu(self, n_cpu: str | int = "auto", strict: bool = False) -> None:
         """Set the number of cpus to be used by zfit. For more control, use `set_cpus_explicit`.
@@ -122,21 +107,6 @@ class RunManager:
             )
             raise RuntimeError(msg) from err
 
-    @contextlib.contextmanager
-    def aquire_cpu(self, max_cpu: int = -1) -> list[str]:
-        if isinstance(max_cpu, int):
-            if max_cpu < 0:
-                max_cpu = max((self.n_cpu + 1 + max_cpu, 0))  # -1 means all
-            if max_cpu == 0:
-                cpu = []
-            else:
-                n_cpu = min((max_cpu, self.n_cpu))
-
-                cpu = self._cpu[-n_cpu:]
-                self._cpu = self._cpu[:-n_cpu]
-
-            yield cpu
-            self._cpu.extend(cpu)
 
     @deprecated(
         None,
@@ -147,8 +117,6 @@ class RunManager:
         "Remove the `run(...)` method.",
     )
     def __call__(self, *args, **kwargs):
-        # TODO: catch maybe sets, as they change the number of elements if we have identical ones
-        # and convert them. Before it's fine, e.g. Parameters are unique, but after it's a value.
         if kwargs:
             msg = "Why kwargs provided?"
             raise RuntimeError(msg)
@@ -164,32 +132,10 @@ class RunManager:
     @staticmethod
     @deprecated(date=None, instructions="Use `set_graph_mode(False)`")
     def experimental_enable_eager(eager: bool = False):  # noqa: ARG004
-        """DEPRECEATED! Enable eager makes tensorflow run like numpy. Useful for debugging.
-
-        Do NOT directly mix it with Numpy (and if, also enable the numberical gradient).
-
-        This can BREAK in the future.
-        """
-        msg = "This function is deprecated. Use `set_graph_mode(False)` instead."
-        raise BreakingAPIChangeError(msg)
+        pass
 
     def experimental_disable_param_update(self, value: bool = True):
-        """Disable the automatic update of parameters in the minimization temporarily or permanently.
-
-        Can be used with a context manager (recommended!).
-
-        This can have unintended side effects if other code (i.e. hepstats) is used, as they expect the parameters to be
-        updated usually.
-
-        Instead, `result.update_params()` has to be called manually to update the parameters if needed.
-        """
-
-        from zfit import settings  # noqa: PLC0415
-
-        def setter(v):
-            settings.options.auto_update_params = not v
-
-        return TemporarilySet(value=value, setter=setter, getter=lambda: not settings.options.auto_update_params)
+        pass
 
     def set_graph_mode(self, graph: bool | str | dict | None = None, *, set_backend: bool | None = None):
         """Set the policy for graph building and the usage of automatic vs numerical gradients.
@@ -305,84 +251,16 @@ class RunManager:
         return TemporarilySet(value=graph, setter=mode_setter, getter=self.get_graph_mode)
 
     def set_autograd_mode(self, autograd: bool | None = None):
-        """Use automatic or numerical gradients.
-
-        zfit runs on top of TensorFlow, a modern, powerful computing engine very similar in design to Numpy.
-        An interactive tutorial can be found at https://github.com/zfit/zfit-tutorials
-
-        **automatic gradient**
-
-        A strong feature of TensorFlow is the possibility to derive an analytic expression for the gradient
-        by successively applying the chain rule to all of its operations. This is *independent* of whether the code
-        is run in graph or eager execution, but requires all operations that are dynamic to be `tf.*` operations.
-        For example, multiplying by a constant (constant as in *not chaning ever*) does not require the constant to
-        be a `tf.constant(...)` but can be a Python scalar. For example, it is also fine to use a fixed template shape
-        using Numpy (Scipy etc), as the template shape will stay constant (this requires though to use a
-        `z.numpy_function` to work, but this is another story about graph mode or not).
-
-        To allow to have dynamic numpy operations in a component, preferably wrapped with `z.numpy_function` instead of
-        forced eager, and to still retrieve a meaningful gradient, a numerical gradient has to be used.
-        In general, this can be achieved by setting the `autograd` to False. Any derivative received will then be
-        numerically computed. Furthermore, some minimizers (e.g. :py:class:`~zfit.minimize.Minuit`) have their own way
-        of calculating gradients, which can be faster.
-        Disabling `autograd` and using the zfit builting numerical way of calculating the gradients and hessian can
-        be less stable and may raises errors.
-
-        Args:
-            autograd: Whether the automatic gradient feature of TensorFlow should be used or a numerical procedure
-              instead. If any non-constant Python (numpy, scipy,...) code is used inside, this should be switched on.
-        """
-        if autograd is None:
-            autograd = True
-        return TemporarilySet(
-            value=autograd,
-            setter=self._set_autograd_mode,
-            getter=self.get_autograd_mode,
-        )
+        pass
 
     def set_mode(
         self,
         graph: bool | str | dict | None = None,  # noqa: ARG002
         autograd: bool | None = None,  # noqa: ARG002
     ):
-        """DEPRECATED!
+        pass
 
-        Use `set_graph_mode` or `set_autograd_mode`.
-        """
-        msg = "Use `set_graph_mode` or `set_autograd_mode`."
-        raise BreakingAPIChangeError(msg)
 
-    def _set_autograd_mode(self, autograd):
-        if autograd is not None:
-            from zfit import settings  # noqa: PLC0415
-
-            settings.options.numerical_grad = not autograd
-            self._mode["autograd"] = autograd
-
-    def _set_graph_mode(self, graph, *, set_backend=True):
-        if graph is None:
-            graph = "auto"
-        from .graph import jit as jit_obj  # noqa: PLC0415
-
-        # only run eagerly if no graph
-        if set_backend:
-            tf.config.run_functions_eagerly(graph is False)
-        if graph is True:
-            jit_obj._set_all(True)
-        elif graph is False:
-            jit_obj._set_all(False)
-        elif graph == "auto":
-            jit_obj._set_default()
-        elif isinstance(graph, dict):
-            jit_obj._update_allowed(graph)
-        elif graph is not None:
-            msg = (
-                f"{graph} is not a valid keyword to the `jit` behavior. Use either "
-                f"True, False, 'default' or a dict. You can read more about it in the docs."
-            )
-            raise ValueError(msg)
-        if graph is not None:
-            self._mode["graph"] = graph
 
     def get_graph_mode(self) -> bool | str:
         """Return the current policy for graph building.
@@ -394,12 +272,7 @@ class RunManager:
 
     @deprecated(None, "Use `get_graph_mode` instead.")
     def current_policy_graph(self) -> bool | str:
-        """DEPRECEATED!
-
-        Use `get_graph_mode` instead.
-        """
-        msg = "Use `get_graph_mode` instead."
-        raise BreakingAPIChangeError(msg)
+        pass
 
     def get_autograd_mode(self) -> bool:
         """The current policy for using the automatic gradient or falling back to the numerical.
@@ -410,17 +283,10 @@ class RunManager:
         return self.mode["autograd"]
 
     def current_policy_autograd(self) -> bool:
-        """DEPRECATED!
-
-        Use `get_autograd_mode` instead.
-        """
-        msg = "Use `get_autograd_mode` instead."
-        raise BreakingAPIChangeError(msg)
+        pass
 
     def set_mode_default(self):
-        """Reset the mode to the default of `graph` = 'auto' and `autograd` = True."""
-        self.set_autograd_mode(True)
-        self.set_graph_mode("auto")
+        pass
 
     def clear_graph_cache(self, *, call_gc: bool | None = None):
         """Clear all generated graphs and effectively reset. Should not affect execution, only performance.
@@ -444,27 +310,7 @@ class RunManager:
         clear_graph_cache(call_gc=call_gc)
 
     def set_graph_cache_size(self, size: int | None = None):
-        """Set the size of the graph cache to the same value for all.
-
-        Whenever a function, decorated with `z.function` is called, it is first compiled to a graph, which is cached.
-        For different reasons, there can be different compiled functions of the same Python function (such as changed
-        internal parameters). The cache determines how many compiled functions are kept in memory.
-
-        Args:
-            size:(default=10) The size of the cache. If None, the default size is used. With a lower number, a
-                smaller memory footprint *can* be achieved in some cases, but the runtime *can* be slower in some cases
-                (they do not need to be the same). Potentially, the cache should be at least of the size as the number
-                of calls to a function *with different arguments* is expected to happen *outside of any loop*/within
-                one execution of a loop.
-        """
-        from zfit.z.zextension import FunctionWrapperRegistry  # noqa: PLC0415
-
-        if size is not None and size < 1:
-            msg = "The size of the cache must be at least 1."
-            raise ValueError(msg)
-
-        for registry in FunctionWrapperRegistry.registries:
-            registry.set_graph_cache_size(size)
+        pass
 
     def assert_executing_eagerly(self):
         """Assert that the execution is eager and Python side effects are taken into account.
@@ -475,11 +321,6 @@ class RunManager:
             msg = "This code is not supposed to run inside a graph."
             raise RuntimeError(msg)
 
-    @property
-    @deprecated(None, "Use `executing_eagerly` instead.")
-    def experimental_is_eager(self):
-        msg = "Use `executing_eagerly` instead."
-        raise BreakingAPIChangeError(msg)
 
     def executing_eagerly(self):
         """Whether eager execution is enabled or not.
@@ -493,33 +334,12 @@ class RunManager:
 
     @deprecated(date=None, instructions="Use `clear_graph_cache` instead.")
     def experimental_clear_caches(self):
-        """DEPRECATED!
-
-        Use `clear_graph_caches` instead.
-        """
-        msg = "Use `clear_graph_cache` instead."
-        raise BreakingAPIChangeError(msg)
+        pass
 
     def hashing_data(self):
-        """If hashing of data (required for caching) is enabled."""
-        return self._hashing_enabled
+        pass
 
     def set_data_hashing(self, enabled: bool):
-        """Enable or disable hashing of data (required for caching).
-
-        Args:
-            enabled: Whether hashing of data is enabled.
-        """
-        self._hashing_enabled = enabled
+        pass
 
 
-@deprecated(None, "Use np.array(obj) instead.")
-def eval_object(obj: object) -> object:
-    from zfit.core.parameter import BaseComposedParameter  # noqa: PLC0415
-
-    if isinstance(obj, BaseComposedParameter):  # currently no numpy attribute. Should we add this?
-        obj = obj.value()
-    if tf.is_tensor(obj):
-        return obj.numpy()
-    else:
-        return obj

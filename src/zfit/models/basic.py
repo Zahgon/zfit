@@ -1,9 +1,4 @@
-"""Basic PDFs are provided here.
 
-Gauss, exponential... that can be used together with Functors to build larger models.
-"""
-
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -132,18 +127,6 @@ class Exponential(BasePDF, SerializableMixin):
     def _set_numerics_data_shift(self, limits):
         if limits:
 
-            def calc_numerics_data_shift():
-                lower, upper = [], []
-                for limit in limits:
-                    low, up = limit.rect_limits
-                    lower.append(z.convert_to_tensor(low[:, 0]))
-                    upper.append(z.convert_to_tensor(up[:, 0]))
-                lower = z.convert_to_tensor(lower)
-                upper = z.convert_to_tensor(upper)
-                lower_val = znp.min(lower, axis=0)
-                upper_val = znp.max(upper, axis=0)
-
-                return (upper_val + lower_val) / 2
 
             old_value = self._calc_numerics_data_shift
 
@@ -153,9 +136,6 @@ class Exponential(BasePDF, SerializableMixin):
         else:
             yield
 
-    # All hooks are needed to set the right shift when "entering" the pdf. The norm range is taken where both are
-    # available. No special need needs to be taken for sampling (it samples from the correct region, the limits, and
-    # uses the predictions by the `unnormalized_prob` -> that is shifted correctly
     def _single_hook_integrate(self, limits, norm, x, options):
         with self._set_numerics_data_shift(norm):
             return super()._single_hook_integrate(limits, norm, x=x, options=options)
@@ -164,37 +144,14 @@ class Exponential(BasePDF, SerializableMixin):
         with self._set_numerics_data_shift(limits=norm):
             return super()._single_hook_analytic_integrate(limits, norm)
 
-    def _single_hook_numeric_integrate(self, limits, norm, options):
-        with self._set_numerics_data_shift(limits=norm):
-            return super()._single_hook_numeric_integrate(limits, norm, options)
 
-    def _single_hook_partial_integrate(self, x, limits, norm, *, options):
-        with self._set_numerics_data_shift(limits=norm):
-            return super()._single_hook_partial_integrate(x, limits, norm, options=options)
 
     def _single_hook_partial_analytic_integrate(self, x, limits, norm):
         with self._set_numerics_data_shift(limits=norm):
             return super()._single_hook_partial_analytic_integrate(x, limits, norm)
 
-    def _single_hook_partial_numeric_integrate(self, x, limits, norm):
-        with self._set_numerics_data_shift(limits=norm):
-            return super()._single_hook_partial_numeric_integrate(x, limits, norm)
 
-    # def _single_hook_normalization(self, limits):
-    #     with self._set_numerics_data_shift(limits=limits):
-    #         return super()._single_hook_normalization(limits)
 
-    #
-    # # TODO: remove component_norm_range? But needed for integral?
-    # def _single_hook_unnormalized_pdf(self, x, name):
-    #     if component_norm_range.limits_are_false:
-    #         component_norm_range = self.space
-    #     if component_norm_range.limits_are_set:
-    #         with self._set_numerics_data_shift(limits=component_norm_range):
-    #             return super()._single_hook_unnormalized_pdf(x, name)
-    #     else:
-    #         return super()._single_hook_unnormalized_pdf(x, name)
-    #
     def _single_hook_pdf(self, x, norm):
         with self._set_numerics_data_shift(limits=norm):
             return super()._single_hook_pdf(x, norm)
@@ -208,36 +165,12 @@ class Exponential(BasePDF, SerializableMixin):
             return super()._single_hook_sample(n, limits, x)
 
 
-def _exp_integral_from_any_to_any(limits, params, model):
-    lambda_ = params["lambda"]
-    lower, upper = limits.rect_limits  # TODO: change to v1 limits?
-    # if any(np.isinf([lower, upper])):
-    #     raise AnalyticIntegralNotImplemented
-
-    integral = _exp_integral_func_shifting(lambd=lambda_, lower=lower, upper=upper, model=model)
-    return integral[0]
 
 
-def _exp_integral_func_shifting(lambd, lower, upper, model):
-    def raw_integral(x):
-        return z.exp(lambd * (model._shift_x(x))) / lambd  # needed due to overflow in exp otherwise
-
-    lower = z.convert_to_tensor(lower)
-    lower_int = raw_integral(x=lower)
-    upper = z.convert_to_tensor(upper)
-    upper_int = raw_integral(x=upper)
-    return upper_int - lower_int
 
 
-def exp_icdf(x, params, model):
-    lambd = params["lambda"]
-    x = z.unstack_x(x)
-    x = model._shift_x(x)
-    return znp.log(lambd * x) / lambd
 
 
-# Exponential.register_inverse_analytic_integral(exp_icdf)  # TODO: register icdf for exponential
-# TODO: cleanup, make cdf registrable _and_ inverse integral, but real
 
 limits = Space(axes=0, limits=(ANY_LOWER, ANY_UPPER))
 Exponential.register_analytic_integral(func=_exp_integral_from_any_to_any, limits=limits)
@@ -342,22 +275,10 @@ class Voigt(BasePDF, SerializableMixin):
         return znp.real(znp.faddeeva_humlicek(complex_z)) / (sigma * np.sqrt(2 * np.pi))
 
 
-def _voigt_integral_from_inf_to_inf(limits, params, model):
-    del model, limits  # unused, fixed limits
-    params["m"]
-    sigma = params["sigma"]
-    params["gamma"]
-    return sigma * np.sqrt(2 * np.pi)
 
 
-# do NOT uncomment, this can lead to deadlocks. No joke: https://github.com/tensorflow/tensorflow/issues/66115
-# limits = Space(axes=0, limits=(-znp.inf, znp.inf))
 
 
-# todo: this only works if executing eagerly, which fails for at least the binned PDFs
-# possible solution comes with the `space.static` concept (?) and a StaticLimitsNotAvailable error,
-# falling back to whatever is available
-#  Voigt.register_analytic_integral(func=_voigt_integral_from_inf_to_inf, limits=limits)
 class VoigtPDFRepr(BasePDFRepr):
     _implementation = Voigt
     hs3_type: Literal["Voigt"] = Field("Voigt", alias="type")

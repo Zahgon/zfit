@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -61,63 +60,18 @@ class BFGS(BaseMinimizer):
         current_loss = None
         nan_counter = 0
 
-        # @z.function
         def update_params_value_grad(loss, params, values):
             for param, value in zip(params, tf.unstack(values, axis=0), strict=True):
                 param.set_value(value)
             value, gradients = loss.value_gradient(params=params, full=False)
             return gradients, value
 
-        def to_minimize_func(values):
-            nonlocal current_loss, nan_counter
-            do_print = self.verbosity > 8
-
-            is_nan = False
-            gradient = None
-            value = None
-            try:
-                gradient, value = update_params_value_grad(loss, params, values)
-
-            except tf.errors.InvalidArgumentError:
-                err = "NaNs"
-                is_nan = True
-            except Exception as e:
-                err = f"unknown error: {e}"
-                raise
-            finally:
-                if value is None:
-                    value = f"invalid, {err}"
-                if gradient is None:
-                    gradient = [f"invalid, {err}"] * len(params)
-                if do_print:
-                    print_gradient(
-                        params,
-                        (values),
-                        [float(g) for g in gradient],
-                        loss=float(value),
-                    )
-            loss_evaluated = value
-            is_nan = is_nan or np.isnan(loss_evaluated)
-            if is_nan:
-                nan_counter += 1
-                info_values = {}
-                info_values["loss"] = value
-                info_values["old_loss"] = current_loss
-                info_values["nan_counter"] = nan_counter
-                value = self.strategy.minimize_nan(loss=loss, params=params, minimizer=self, values=info_values)
-            else:
-                nan_counter = 0
-                current_loss = value
-
-            gradient = znp.stack(gradient)
-            return value, gradient
 
         initial_inv_hessian_est = tf.linalg.tensor_diag([p.stepsize for p in params])
 
         minimizer_kwargs = {
             "initial_position": znp.stack(params),
             "x_tol": self.tol,
-            # f_relative_tolerance=self.tolerance * 1e-5,  # TODO: use edm for stopping criteria
             "initial_inverse_hessian_estimate": initial_inv_hessian_est,
             "parallel_iterations": 1,
             "max_iterations": self.max_calls,
@@ -125,7 +79,6 @@ class BFGS(BaseMinimizer):
         minimizer_kwargs.update(self.options)
         result = minimizer_fn(to_minimize_func, **minimizer_kwargs)
 
-        # save result
         params_result = np.asarray(result.position)
         assign_values(params, values=params_result)
 

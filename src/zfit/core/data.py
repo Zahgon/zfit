@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -230,85 +229,29 @@ class Data(
 
         self.dataset = data
         self._set_weights(weights=weights)
-        # check that dimensions are compatible
 
         self._update_hash()
 
-    @property
-    def _using_hash(self) -> bool:
-        return self._use_hash and run.hashing_data()
 
-    @property
-    def label(self) -> str:
-        return self._label
 
-    @property
-    def num_entries(self) -> int:
-        nentries = self._nentries
-        if nentries is None:
-            nentries = self._get_nentries()
-        return nentries
 
     @property
     def nentries(self) -> int:
-        """Number of entries in the dataset.
+        pass
 
-        Returns:
-            Number of entries/events in the dataset.
-        """
-        return self.num_entries
-
-    @property
-    @deprecated(
-        None, "Use `nentries` (for an int) or `samplesize` for a float corresponding to the sum of weights) instead."
-    )
-    def nevents(self):
-        return self.num_entries
 
     @property
     def samplesize(self) -> tf.Tensor:
-        """Effective sample size, sum of weights.
-
-        To get the number of entries, use `nentries` instead.
-        """
-        samplesize = znp.sum(self.weights) if self.has_weights else self.num_entries
-        return znp.asarray(samplesize, dtype=ztypes.float)
+        pass
 
     def enable_hashing(self) -> None:
-        """Enable hashing for this data object if it was disabled.
+        pass
 
-        A hash allows some objects to be cached and reused. If a hash is enabled, the data object will be hashed and the
-        hash _can_ be used for caching. This can speedup various objects, however, it maybe doesn't have an effect at
-        all. For example, if an object was already called before with the data object, the hash will probably not be
-        used, as the object is already compiled.
-        """
-        from zfit import run  # noqa: PLC0415
 
-        run.assert_executing_eagerly()
-        self._use_hash = True
-        self._update_hash()
 
-    @property
-    def hashint(self) -> int | None:
-        return self._hashint
 
-    # TODO: which naming? nevents or n_events
 
-    @property
-    def _approx_nevents(self) -> int:
-        return self.num_entries
 
-    @property
-    def n_events(self) -> int:
-        return self.num_entries
-
-    @property
-    def has_weights(self) -> bool:
-        return self._weights is not None
-
-    @property
-    def dtype(self) -> tf.DType:
-        return self._dtype
 
     def _set_space(self, obs: Space, autofill: bool = True) -> None:
         obs = convert_to_space(obs)
@@ -317,30 +260,7 @@ class Data(
             obs = obs.with_autofill_axes(overwrite=True)
         self._space = obs
 
-    @property
-    @deprecated(None, "Use `space` instead.")
-    def data_range(self):
-        data_range = self._data_range
-        if data_range is None:
-            data_range = self.space
-        return data_range
 
-    @invalidate_graph
-    @deprecated(
-        None,
-        "Do not change the range, preferably use pandas or similar, or use `with_obs` instead.",
-    )
-    def set_data_range(self, data_range):
-        data_range = self._check_input_data_range(data_range=data_range)
-
-        def setter(value):
-            self._data_range = value
-            self._update_hash()
-
-        def getter():
-            return self._data_range
-
-        return TemporarilySet(value=data_range, setter=setter, getter=getter)
 
     def _copy(self, deep, name, overwrite_params):
         """Copy the object, overwrite params with overwrite_params."""
@@ -366,48 +286,15 @@ class Data(
 
     @property
     def weights(self) -> tf.Tensor | None:
-        """Get the weights of the data."""
-        return self._weights
+        pass
 
     def with_weights(self, weights: ztyping.WeightsInputType) -> Data:
-        """Create a new ``Data`` with a different set of weights.
-
-        Args:
-            weights: The new weights to use. Has to be 1-D and match the shape of the data (nevents).
-
-        Returns:
-            ``zfit.Data``: A new ``Data`` object containing the new weights.
-        """
-        run.assert_executing_eagerly()
-
-        if weights is not None:
-            weights = znp.asarray(weights)
-            if weights.shape.ndims != 1:
-                msg = "Weights have to be 1-Dim objects."
-                raise ValueError(msg)
-            if weights.shape[0] != self.num_entries:
-                msg = "Weights have to have the same length as the data."
-                raise ValueError(msg)
-        return self.copy(weights=weights, guarantee_limits=True)
+        pass
 
     @deprecated(None, "Use `with_weights` instead.")
     @invalidate_graph
     def set_weights(self, weights: ztyping.WeightsInputType):
-        """Set (temporarily) the weights of the dataset.
-
-        Args:
-            weights:
-        """
-
-        # weights = self._set_weights(weights)
-
-        def setter(value):
-            self._set_weights(value)
-
-        def getter():
-            return self.weights
-
-        return TemporarilySet(value=weights, getter=getter, setter=setter)
+        pass
 
     def _set_weights(self, weights):
         if weights is not None and not isinstance(
@@ -422,9 +309,6 @@ class Data(
         self._update_hash()
         return weights
 
-    @property
-    def space(self) -> ZfitSpace:
-        return self._space
 
     @classmethod
     def from_pandas(
@@ -622,80 +506,10 @@ class Data(
         dtype: tf.DType = None,
         root_dir_options=None,
         use_hash: bool | None = None,
-        # deprecated
         branches: list[str] | None = None,
         branches_alias: dict | None = None,
     ) -> Data:
-        """Create a ``Data`` from a ROOT file. Arguments are passed to ``uproot``.
-
-        The arguments are passed to uproot directly.
-
-        Args:
-            path: Path to the root file.
-            treepath: Name of the tree in the root file.
-            obs: Observables of the data. This will also be the columns of the data if not *obs_alias* is given.
-            weights: Weights of the data. Has to be 1-D and match the shape
-                of the data (nevents). Can be a column of the ROOT file by using a string corresponding to a
-                column.
-            obs_alias: A mapping from the ``obs`` (as keys) to the actual ``branches`` (as values) in the root file.
-                This allows to have different ``observable`` names, independent of the branch name in the file.
-            name: |@doc:data.init.name| Name of the data.
-               This can possibly be used for future identification, with possible
-               implications on the serialization and deserialization of the data.
-               The name should therefore be "machine-readable" and not contain
-               special characters.
-               (currently not used for a special purpose)
-               For a human-readable name or description, use the label. |@docend:data.init.name|
-            label: |@doc:data.init.label| Human-readable name
-               or label of the data for a better description, to be used with plots etc.
-               Can contain arbitrary characters.
-               Has no programmatical functional purpose as identification. |@docend:data.init.label|
-            dtype: dtype of the data.
-            root_dir_options: Options passed to uproot.
-            use_hash: If ``True``, a hash of the data is created and is used to identify it in caching.
-
-        Returns:
-            ``zfit.Data``: A ``Data`` object containing the unbinned data.
-        """
-        # begin deprecated legacy arguments
-        if branches:
-            msg = "Use `obs` instead of `branches`."
-            raise BreakingAPIChangeError(msg)
-        if branches_alias is not None:
-            msg = "Use `obs_alias` instead of `branches_alias`."
-            raise BreakingAPIChangeError(msg)
-        # end legacy
-        if root_dir_options is None:
-            root_dir_options = {}
-        if obs_alias is None and obs is None:
-            msg = "Either branches or branches_alias has to be specified."
-            raise ValueError(msg)
-        if obs_alias is None:
-            obs_alias = {}
-        if obs is None:
-            obs = list(obs_alias.values())
-
-        obs = convert_to_space(obs)
-
-        branches = [obs_alias.get(branch, branch) for branch in obs.obs]
-
-        weights_are_branch = isinstance(weights, str)
-
-        def uproot_loader():
-            with uproot.open(path, **root_dir_options)[treepath] as root_tree:
-                branches_with_weights = [*branches, weights] if weights_are_branch else branches
-                branches_with_weights = tuple(branches_with_weights)
-                data = root_tree.arrays(expressions=branches_with_weights, library="pd")
-            data_np = data[branches].to_numpy()
-            weights_np = data[weights].to_numpy() if weights_are_branch else None
-            return data_np, weights_np
-
-        data, weights_np = uproot_loader()
-        if not weights_are_branch:
-            weights_np = weights
-        dataset = LightDataset.from_tensor(data, ndims=obs.n_obs)
-
-        return Data(data=dataset, obs=obs, name=name, weights=weights_np, dtype=dtype, use_hash=use_hash, label=label)
+        pass
 
     @classmethod
     def from_numpy(
@@ -753,12 +567,6 @@ class Data(
         Raises:
             TypeError: If the array is not a numpy array.
         """
-        # todo: should we switch orders
-        # # legacy, switch input arguments
-        # if isinstance(obs, np.ndarray) or isinstance(array, (str, ZfitSpace)) or (isinstance(array, (list, tuple)) and isinstance(array[0], str)):
-        #     warn_once("The order of the arguments `obs` and `array` has been swapped, array goes first (as any other `from_` constructor.", identifier="data_from_numpy")
-        #     obs, array = array, obs
-        # # legacy end
         if isinstance(array, float | int):
             array = np.array([array])
         if not isinstance(array, (np.ndarray)) and not (tf.is_tensor(array) and hasattr(array, "numpy")):
@@ -834,12 +642,6 @@ class Data(
         Raises:
             TypeError: If the tensor is not a tensorflow tensor.
         """
-        # todo: should we switch orders
-        # # legacy start
-        # if isinstance(obs, (np.ndarray, tf.Tensor)) or tf.is_tensor(obs) or isinstance(tensor, (str, ZfitSpace)) or (isinstance(tensor, (list, tuple)) and isinstance(tensor[0], str)):
-        #     warn_once("The order of the arguments `obs` and `array` has been swapped, array goes first (as any other `from_` constructor.", identifier="data_from_numpy")
-        #     obs, tensor = tensor, obs
-        # # legacy end
         if dtype is None:
             dtype = ztypes.float
         tensor = znp.asarray(tensor, dtype=dtype)
@@ -904,25 +706,7 @@ class Data(
         return self.copy(obs=obs, data=dataset, weights=weights, guarantee_limits=guarantee_limits)
 
     def to_pandas(self, obs: ztyping.ObsTypeInput = None, weightsname: str | None = None) -> pd.DataFrame:
-        """Create a ``pd.DataFrame`` from ``obs`` as columns and return it.
-
-        Args:
-            obs: The observables to use as columns. If ``None``, all observables are used.
-            weightsname: The name of the weights column if the data has weights. If ``None``, defaults to ``""``, an empty string.
-
-        Returns:
-            ``pd.DataFrame``: A ``pd.DataFrame`` containing the data and the weights (if present).
-        """
-        if obs is None:
-            obs = self.obs
-        obs_str = list(convert_to_obs_str(obs))
-        data = {ob: self.value(obs=ob) for ob in obs_str}
-        if self.has_weights:
-            weights = self.weights
-            if weightsname is None:
-                weightsname = ""
-            data.update({weightsname: weights})
-        return pd.DataFrame.from_dict(data)
+        pass
 
     def unstack_x(self, obs: ztyping.ObsTypeInput = None, always_list=None):
         """Return the unstacked data: a list of tensors or a single Tensor.
@@ -997,11 +781,6 @@ class Data(
         """
         return self.value().numpy()
 
-    def _value_internal(self, obs: ztyping.ObsTypeInput = None):
-        if obs is not None:
-            obs = convert_to_obs_str(obs)
-        perm_indices = self._get_permutation_indices(obs)
-        return self.dataset.value(perm_indices)
 
     def _get_permutation_indices(self, obs):
         obs = convert_to_obs_str(obs)
@@ -1017,20 +796,8 @@ class Data(
 
         return perm_indices
 
-    def sort_by_axes(self, *_, **__):
-        msg = "Use `with_axes` instead."
-        raise BreakingAPIChangeError(msg)
 
-    def sort_by_obs(self, *_, **__):
-        msg = "Use `with_obs` instead."
-        raise BreakingAPIChangeError(msg)
 
-    def _check_input_data_range(self, data_range):
-        data_range = self._convert_sort_space(limits=data_range)
-        if frozenset(self.data_range.obs) != frozenset(data_range.obs):
-            msg = f"Data range has to cover the full observable space {self.data_range.obs}, not only {data_range.obs}"
-            raise ObsIncompatibleError(msg)
-        return data_range
 
     def _convert_sort_space(
         self,
@@ -1056,8 +823,6 @@ class Data(
             space = space.with_coords(self.space, allow_subset=True)
         return space
 
-    def _get_nentries(self):
-        return self.dataset.num_entries
 
     def to_binned(
         self,
@@ -1138,28 +903,9 @@ class DataRepr(BaseRepr):
     name: str | None = None
     weights: np.ndarray | None = None
 
-    @pydantic.root_validator(pre=True)
-    def extract_data(cls, values):
-        if cls.orm_mode(values):
-            values = dict(values)
-            values["data"] = values["value"]()
-        return values
 
-    @pydantic.validator("space", pre=True)
-    def flatten_spaces(cls, v):
-        if cls.orm_mode(v):
-            v = [v.get_subspace(o) for o in v.obs]
-        return v
 
-    @pydantic.validator("data", pre=True)
-    def convert_data(cls, v):
-        return np.asarray(v)
 
-    @pydantic.validator("weights", pre=True)
-    def convert_weights(cls, v):
-        if v is not None:
-            v = np.asarray(v)
-        return v
 
     @to_orm_init
     def _to_orm(self, init):
@@ -1175,10 +921,6 @@ class DataRepr(BaseRepr):
         return super()._to_orm(init)
 
 
-def getitem_obs(self, item):
-    if not isinstance(item, str):
-        item = convert_to_obs_str(item)
-    return self.value(item)
 
 
 def check_cut_datamap_weights(limits, data, weights, guarantee_limits):
@@ -1300,23 +1042,8 @@ class SamplerData(Data):
         self.update_data(data.value(), weights=weights)  # to be used for precompilations etc
         self._sampler_guarantee_limits = guarantee_limits
 
-    # legacy
-    @property
-    @deprecated(None, "Use `params` instead.")
-    def fixed_params(self):
-        return self.params
 
-    # legacy end
-    @property
-    def n_samples(self):
-        return self._n_holder
 
-    @property
-    def _approx_nevents(self):
-        nevents = super()._approx_nevents
-        if nevents is None:
-            nevents = self.n
-        return nevents
 
     def _update_hash(self):
         if not run.executing_eagerly() or not self._using_hash:
@@ -1326,24 +1053,7 @@ class SamplerData(Data):
         if hasattr(self, "_hashint_holder"):
             self._hashint_holder.assign(self._hashint % (64**2))
 
-    def _value_internal(self, obs: ztyping.ObsTypeInput = None):
-        if hasattr(self, "_initial_resampled") and not self._initial_resampled:  # if not initialized, we can't sample
-            msg = (
-                "No data generated yet. Use `resample()` to generate samples or directly use `model.sample()`"
-                "for single-time sampling."
-            )
-            raise RuntimeError(msg)
-        return super()._value_internal(obs=obs)
 
-    @property
-    def hashint(self) -> int | None:
-        if run.executing_eagerly():
-            return (
-                self._hashint
-            )  # since the variable can be changed but this may stays static... and using 128 bits we can't have
-        else:
-            return self._hashint_holder.value()
-        # a tf.Variable that keeps the int
 
     @classmethod
     def get_cache_counting(cls):
@@ -1351,29 +1061,6 @@ class SamplerData(Data):
         cls._cache_counting += 1
         return counting
 
-    @classmethod
-    @deprecated(None, "Use `from_sampler` instead (with an 'r' at the end).")
-    def from_sample(
-        cls,
-        sample_func: Callable,
-        n: ztyping.NumericalScalarType,
-        obs: ztyping.ObsTypeInput,
-        fixed_params=None,
-        name: str | None = None,
-        weights=None,
-        dtype=None,
-        use_hash: bool | None = None,
-    ):
-        return cls.from_sampler(
-            sample_func=sample_func,
-            n=n,
-            obs=obs,
-            fixed_params=fixed_params,
-            name=name,
-            weights=weights,
-            dtype=dtype,
-            use_hash=use_hash,
-        )
 
     @classmethod
     @deprecated_args(None, "Use `params` instead.", "fixed_params")
@@ -1392,118 +1079,7 @@ class SamplerData(Data):
         use_hash: bool | None = None,
         guarantee_limits: bool = False,
     ):
-        """Create a `SamplerData` from a sampler function.
-
-        This is a more flexible way to create a `SamplerData`. Instead of providing a fixed sample, a sampler function
-        is provided that will be called to sample the data. If the data is used in the loss, the sampler function will
-        updated the value in the compiled version.
-
-        .. note::
-
-            If any method of the `SamplerData` is used to create a new data object, such as `with_obs`, the resulting
-            data will be a `Data` object and not a `SamplerData` object; the data will be fixed and not resampled.
-
-        Args:
-            sample_func: A callable that takes as argument `n` and returns a sample of the data. The sample has to have the same number of
-                observables as the `obs` of the `SamplerData`. If `None`, `sample_and_weights_func` has to be given.
-            sample_and_weights_func: A callable that takes as argument `n` and returns a tuple of the sample and the weights of the data.
-                The sample has to have the same number of observables as the `obs` of the `SamplerData`. If `None`, `sample_func` has to be given.
-
-            n: The number of samples to produce initially. This is used to have a first sample that can be used for compilation.
-            obs: Observables of the data. If the space has limits, the data will be cut to the limits.
-            params: A mapping from `Parameter` or a string to a numerical value. This is used as the default values for the
-                parameters in the `sample_func` or `sample_and_weights_func` and needs to fully specify the parameters.
-            name: |@doc:data.init.name| Name of the data.
-               This can possibly be used for future identification, with possible
-               implications on the serialization and deserialization of the data.
-               The name should therefore be "machine-readable" and not contain
-               special characters.
-               (currently not used for a special purpose)
-               For a human-readable name or description, use the label. |@docend:data.init.name|
-            label: |@doc:data.init.label| Human-readable name
-               or label of the data for a better description, to be used with plots etc.
-               Can contain arbitrary characters.
-               Has no programmatical functional purpose as identification. |@docend:data.init.label|
-            dtype: The dtype of the data.
-            use_hash: |@doc:data.init.use_hash| If true, store a hash for caching.
-               If a PDF can cache values, this option needs to be enabled for the PDF
-               to be able to cache values. |@docend:data.init.use_hash|
-            guarantee_limits: |@doc:data.init.guarantee_limits| Guarantee that the data is within the limits.
-               If ``True``, the data will not be checked and _is assumed_ to be within the limits,
-               possibly because it was already cut before. This can lead to a performance
-               improvement as the data does not have to be checked. |@docend:data.init.guarantee_limits|
-        """
-        # legacy start
-        if fixed_params is not None:
-            msg = "Use `params` instead of `fixed_params`."
-            raise BreakingAPIChangeError(msg)
-        # legacy end
-        if sample_func is None and sample_and_weights_func is None:
-            msg = "Either `sample_func` or `sample_and_weights_func` has to be given."
-            raise ValueError(msg)
-        if sample_func is not None and sample_and_weights_func is not None:
-            msg = "Only one of `sample_func` or `sample_and_weights_func` can be given."
-            raise ValueError(msg)
-        if sample_func is not None:
-            if not callable(sample_func):
-                msg = (
-                    "sample_func has to be a callable. If you want to use a fixed sample, use `sample_func=lambda x=sample: x`, "
-                    "this will use the sample as a fixed sample when using `resample`."
-                )
-                raise TypeError(msg)
-
-            def sample_and_weights_func(n, params):
-                return sample_func(n, params), None
-        elif not callable(sample_and_weights_func):
-            msg = "sample_and_weights_func has to be a callable."
-            raise TypeError(msg)
-
-        obs = convert_to_space(obs)
-
-        if dtype is None:
-            dtype = ztypes.float
-
-        params = convert_param_values(params)
-        init_val, init_weights = sample_and_weights_func(n, params)
-
-        init_val, init_weights = check_cut_data_weights(
-            limits=obs, data=init_val, weights=init_weights, guarantee_limits=guarantee_limits
-        )
-        sample_holder = tf.Variable(
-            initial_value=init_val,
-            dtype=dtype,
-            trainable=False,
-            shape=(None, obs.n_obs),
-            name=f"sample_data_holder_{cls.get_cache_counting()}",
-        )
-        dataset = LightDataset.from_tensor(sample_holder, ndims=obs.n_obs)
-
-        weights = init_weights
-        weights_holder = None
-        if weights is not None:
-            weights_holder = tf.Variable(
-                initial_value=weights,
-                dtype=dtype,
-                trainable=False,
-                shape=(None,),
-                name=f"weights_data_holder_{cls.get_cache_counting()}",
-            )
-
-        return cls(
-            data=dataset,
-            sample_holder=sample_holder,
-            weights_holder=weights_holder,
-            sample_and_weights_func=sample_and_weights_func,
-            params=params,
-            n=n,
-            obs=obs,
-            name=name,
-            label=label,
-            weights=weights,
-            use_hash=use_hash,
-            guarantee_limits=True,
-            dtype=dtype,
-        )
+        pass
 
     def update_data(
         self, sample: TensorLike | ZfitUnbinnedData, weights: TensorLike | None = None, guarantee_limits: bool = False
@@ -1567,36 +1143,7 @@ class SamplerData(Data):
         n: TensorLike = None,
         param_values: ztyping.ParamValuesMap = None,
     ):
-        """Update the sample by newly sampling *inplace*, affecting objects that have it internally, like likelihoods.
-
-        The values of the parameters used to sample the PDF are taken from the creation of the Sampler and won't change
-        by setting their values, i.e. using `param.set_values`. Parameter values (some or all) can be overridden
-        by providing the ``params`` argument.
-
-        Args:
-            params: a mapping from :py:class:`~zfit.Parameter` or string to a `value` so that the sampler will use
-                this value for the sampling. If not given, the `params` will be used.
-            n: the number of samples to produce. If the `Sampler` was created with
-                anything else then a numerical or tf.Tensor, this can't be used.
-        """
-        if n is None:
-            n = self.n
-
-        if param_values is not None:
-            if params is not None:
-                msg = "Cannot specify both `fixed_params` and `params`."
-                raise ValueError(msg)
-            params = param_values
-        temp_param_values = self.params.copy()
-        if params is not None:
-            params = convert_param_values(params)
-            temp_param_values.update(params)
-
-        new_sample, new_weight = self._sample_and_weights_func(n, params=temp_param_values)
-        new_sample.set_shape((n, self.space.n_obs))
-        if new_weight is not None:
-            new_weight.set_shape((n,))
-        self.update_data(sample=new_sample, weights=new_weight, guarantee_limits=self._sampler_guarantee_limits)
+        pass
 
     def __str__(self) -> str:
         return f"<SamplerData: {self.label} obs={self.obs} size={int(self.num_entries)} weighted={self.has_weights} array={self.value()}>"
@@ -1646,7 +1193,6 @@ def concat(
         tf.errors.InvalidArgumentError: If the number of events in the datasets is not equal.
         ObsIncompatibleError: If the observables are not unique or not the same in all datasets for merging along the observable axis.
     """
-    # todo: only works for obs, not yet for axes, but needed?
     if axis is None or axis in (0, "index"):
         axis = 0
     elif axis in (1, "obs", "columns"):
@@ -1667,7 +1213,6 @@ def concat(
 
 
 def concat_data_obs(datasets, obs, name, label, use_hash):
-    # check if there are overlapping observables
     all_obs = [ob for data in datasets for ob in data.obs]
     obscounter = Counter(all_obs)
     if any(count > 1 for count in obscounter.values()):
@@ -1766,7 +1311,6 @@ def concat_data_index(datasets, obs, name, label, use_hash):
     )
 
 
-# register_tensor_conversion(Data, name="Data", overload_operators=True)
 
 
 class LightDataset:
@@ -1816,20 +1360,8 @@ class LightDataset:
         self._ndims = ndims
         self._nevents = None
 
-    def batch(self, _):  # ad-hoc just empty, mimicking tf.data.Dataset interface
-        return self
 
-    @property
-    def num_entries(self):
-        return (
-            tf.shape(self._tensor)[0] if self._tensor is not None else tf.shape(next(iter(self._tensormap.values())))[0]
-        )
 
-    @property
-    def ndims(self):
-        if (ndims := self._ndims) is None:
-            ndims = len(self._tensormap)
-        return ndims
 
     def __iter__(self):
         yield self.value()
@@ -1879,7 +1411,6 @@ class LightDataset:
                 if not isvar:  # we don't want to destroy the variable
                     self._tensormap = tensormap
                     self._tensor = None
-        # do NOT update self, it could be a variable that we don't want to touch
         return tensor, tensormap
 
     def value(self, index: int | tuple[int] | list[int] | None = None):
@@ -1902,7 +1433,6 @@ class LightDataset:
 
         tensor, tensormap = self._get_tensor_and_tensormap(forcemap=forcemap)
         if tensor is None:
-            # tensormap is filled, we can now return the values, either a single one or a stacked tensor
             if isinstance(index, int):
                 return tensormap[index]  # todo: add case for single index in tuple?
             return znp.stack([tensormap[i] for i in index], axis=-1)
@@ -1944,39 +1474,7 @@ def sum_samples(
     weights: ztyping.WeightsInputType = None,
     shuffle: bool = False,
 ):
-    """Add the events of two samples together.
-
-    Args:
-        sample1: The first sample to add.
-        sample2: The second sample to add.
-        obs: The observables of the data. The sum will be done in this order and on this subset of observables.
-        weights:  The new weights, as the sum cannot be done with the weights. If `False`, the weights are dropped.
-        shuffle: If `True`, the second sample will be shuffled before adding it to the first sample.
-
-    Returns:
-    """
-    samples = [sample1, sample2]
-    if obs is None:
-        obs = sample1.obs
-        obs = convert_to_space(obs)
-        obs2 = sample2.obs
-        obs2 = convert_to_space(obs2)
-        if obs != obs2:
-            msg = "Observables of both samples have to be the same _or_ the observables have to be given as `obs` and must not be `None`."
-            raise ValueError(msg)
-
-    sample2 = sample2.value(obs=obs)
-    if shuffle:
-        sample2 = z.random.shuffle(sample2)
-    sample1 = sample1.value(obs=obs)
-    tensor = sample1 + sample2
-    if any(s.weights is not None for s in samples) and weights is not False:
-        msg = "Cannot combine weights currently. Either specify `weights=False` to drop them or give the weights explicitly."
-        raise WorkInProgressError(msg)
-    if weights is False:
-        weights = None
-
-    return Data.from_tensor(tensor=tensor, obs=obs, weights=weights)
+    pass
 
 
 class Sampler(SamplerData):

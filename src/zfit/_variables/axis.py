@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -11,9 +10,6 @@ import zfit_interface as zinterface
 if typing.TYPE_CHECKING:
     import zfit  # noqa: F401
 
-# @tfp.experimental.auto_composite_tensor()
-# class Regular(hist.axis.Regular, tfp.experimental.AutoCompositeTensor, family='zfit'):
-#     pass
 from .._interfaces import ZfitBinning
 
 
@@ -21,9 +17,6 @@ class Variable(zinterface.variables.ZfitVar):
     def __init__(self, name):
         self._name = name
 
-    @property
-    def name(self):
-        return self._name
 
 
 class SpaceV2:
@@ -41,17 +34,8 @@ class SpaceV2:
     def __iter__(self):
         yield from self.axes
 
-    @property
-    def names(self):
-        return [axis.name for axis in self]
 
 
-def to_var_str(value):
-    if isinstance(value, str):
-        return value
-    if isinstance(value, zinterface.variables.ZfitVar):
-        return value.name
-    return None
 
 
 class Axis(Variable):
@@ -66,7 +50,6 @@ class UnbinnedAxis(Axis):
         self.upper = upper
 
 
-# TODO: fill out below and don't just use the hist objects
 class HashableAxisMixin:
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -95,12 +78,8 @@ class Binnings(hist.axestuple.NamedAxesTuple):
 HIST_BINNING_TYPES = (hist.axis.Regular, hist.axis.Variable)
 
 
-def histaxis_to_axis(axis):
-    return axis
 
 
-def axis_to_histaxis(axis):
-    return axis
 
 
 def new_from_axis(axis):

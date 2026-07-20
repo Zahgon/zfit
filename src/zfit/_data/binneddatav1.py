@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -52,7 +51,6 @@ def convert_hist2binneddata(data: ZfitBinnedData | PlottableHistogram, *, none_i
         raise TypeError(msg)
 
 
-# @tfp.experimental.auto_composite_tensor()
 class BinnedHolder:
     def __init__(self, space, values, variances):
         self._check_init_values(space, values, variances)
@@ -144,10 +142,8 @@ def move_axis_obs(original, target, values, variances=None):
 flow = False  # TODO: track the flow or not?
 
 
-# @tfp.experimental.auto_composite_tensor()
 class BinnedData(
     ZfitBinnedData,
-    # tfp.experimental.AutoCompositeTensor, OverloadableMixinValues, ZfitBinnedData
 ):
     USE_HASH = False
 
@@ -192,24 +188,8 @@ class BinnedData(
         return type(self)(h=self.holder.with_variances(variances), name=self.name, label=self.label)
 
     def enable_hashing(self):
-        """Enable hashing for this data object if it was disabled.
+        pass
 
-        A hash allows some objects to be cached and reused. If a hash is enabled, the data object will be hashed and the
-        hash _can_ be used for caching. This can speedup various objects, however, it maybe doesn't have an effect at
-        all. For example, if an object was already called before with the data object, the hash will probably not be
-        used, as the object is already compiled.
-        """
-        from zfit import run  # noqa: PLC0415
-
-        run.assert_executing_eagerly()
-        self._use_hash = True
-        self._update_hash()
-
-    @property
-    def _using_hash(self):
-        from zfit import run  # noqa: PLC0415
-
-        return self._use_hash and run.hashing_data()
 
     @classmethod  # TODO: add overflow bins if needed
     def from_tensor(
@@ -298,7 +278,6 @@ class BinnedData(
             obs: Which obs to return
         """
         return BinnedData(h=self.holder.with_obs(obs), name=self.name, label=self.label)
-        # no subclass, as this allows the sampler to be the same still and not reinitiated
 
     def _update_hash(self):
         from zfit import run  # noqa: PLC0415
@@ -314,25 +293,10 @@ class BinnedData(
             else:  # if the dataset is not yet initialized; this is allowed
                 self._hashint = None
 
-    @property
-    def hashint(self) -> int | None:
-        return self._hashint
 
-    @property
-    def kind(self):
-        return "COUNT"
 
-    @property
-    def n_obs(self) -> int:
-        return self.rank
 
-    @property
-    def rank(self) -> int:
-        return self.space.n_obs
 
-    @property
-    def obs(self):
-        return self.space.obs
 
     def to_hist(self) -> hist.Hist:
         """Convert the binned data to a :py:class:`~hist.NamedHist`.
@@ -348,25 +312,9 @@ class BinnedData(
             h.view(flow=flow).variance = variances  # TODO: flow?
         return h
 
-    def _to_boost_histogram_(self):
-        binning = binning_to_histaxes(self.holder.space.binning)
-        h = bh.Histogram(*binning, storage=bh.storage.Weight())
-        h.view(flow=flow).value = self.values()  # TODO: flow?
-        if (variances := self.variances()) is not None:
-            h.view(flow=flow).variance = variances  # TODO: flow?
-        return h
 
-    @property
-    def space(self):
-        return self.holder.space
 
-    @property
-    def axes(self):
-        return self.binning
 
-    @property
-    def binning(self):
-        return self.space.binning
 
     def values(self) -> znp.array:  # , flow=False
         """Values of the histogram as an ndim array.
@@ -378,9 +326,6 @@ class BinnedData(
             Tensor of shape (nbins0, nbins1, ...) with nbins the number of bins in each observable.
         """
         return self.holder.values
-        # if not flow:  # TODO: flow?
-        #     shape = tf.shape(vals)
-        #     vals = tf.slice(vals, znp.ones_like(shape), shape - 2)
 
     def variances(self) -> None | znp.array:  # , flow=False
         """Variances, if available, of the histogram as an ndim array.
@@ -392,9 +337,6 @@ class BinnedData(
             Tensor of shape (nbins0, nbins1, ...) with nbins the number of bins in each observable.
         """
         return self.holder.variances
-        # if not flow:  # TODO: flow?
-        #     shape = tf.shape(vals)
-        #     vals = tf.slice(vals, znp.ones_like(shape), shape - 2)
 
     def counts(self):
         """Effective counts of the histogram as a ndim array.
@@ -407,35 +349,15 @@ class BinnedData(
         """
         return self.values()
 
-    # dummy
-    @property
-    def data_range(self):
-        return self.space
 
-    @property
-    def num_entries(self):
-        return self.shape.num_elements()
 
     @property
     def shape(self):
         return self.values().shape
 
-    @property
-    def samplesize(self) -> float:
-        return znp.asarray(znp.sum(self.values()), dtype=ztypes.float)
 
-    @property
-    @deprecated(None, "Use `num_entries` (for the int) or `samplesize` (for a total sum of all weights) instead.")
-    def nevents(self):
-        return self.num_entries
 
-    @property
-    def n_events(self):  # LEGACY, what should be the name?
-        return self.num_entries
 
-    @property
-    def _approx_nevents(self):
-        return znp.sum(self.values())
 
     def __eq__(self, other):
         return id(self) == id(other)
@@ -444,19 +366,7 @@ class BinnedData(
         return hash(id(self))
 
     def to_unbinned(self):
-        """Use the bincenters as unbinned data with values as counts.
-
-        Returns:
-            ``ZfitData``: Unbinned data
-        """
-        meshed_center = znp.meshgrid(*self.axes.centers, indexing="ij")
-        flat_centers = [znp.reshape(center, (-1,)) for center in meshed_center]
-        centers = znp.stack(flat_centers, axis=-1)
-        flat_weights = znp.reshape(self.values(), (-1,))  # TODO: flow?
-        space = self.space.copy(binning=None)
-        from zfit import Data  # noqa: PLC0415
-
-        return Data.from_tensor(obs=space, tensor=centers, weights=flat_weights)
+        pass
 
     def __str__(self):
         import zfit  # noqa: PLC0415
@@ -465,15 +375,8 @@ class BinnedData(
             return self.to_hist().__str__()
         return f"Binned data {self.axes} (compiled, no preview)"
 
-    def _repr_html_(self):
-        import zfit  # noqa: PLC0415
-
-        if zfit.run.executing_eagerly():
-            return self.to_hist()._repr_html_()
-        return f"Binned data {self.axes} (compiled, no preview)"
 
 
-# tensorlike.register_tensor_conversion(BinnedData, name='BinnedData', overload_operators=True)
 
 
 class BinnedSamplerData(BinnedData):
@@ -516,7 +419,6 @@ class BinnedSamplerData(BinnedData):
         self.n = n
         self._n_holder = n
 
-        # we need to use a hash because it could change -> for loss etc to know when data changes
         self._hashint_holder = tf.Variable(
             initial_value=0,
             dtype=tf.int64,
@@ -530,7 +432,6 @@ class BinnedSamplerData(BinnedData):
                 initial_value=values,
                 dtype=values.dtype,
                 trainable=False,
-                # validate_shape=False,
                 shape=(None,) * self.space.n_obs,
                 name=f"sample_hist_holder_{type(self).get_cache_counting()}",
             )
@@ -543,7 +444,6 @@ class BinnedSamplerData(BinnedData):
                         initial_value=variances,
                         dtype=variances.dtype,
                         trainable=False,
-                        # validate_shape=False,
                         shape=(None,) * self.space.n_obs,
                         name=f"variances_hist_holder_{type(self).get_cache_counting()}",
                     )
@@ -555,25 +455,9 @@ class BinnedSamplerData(BinnedData):
         self._variances_holder = variances_holder
         self.update_data(values, variances=variances)
 
-    @property
-    @deprecated(None, "Use `params` instead.")
-    def fixed_params(self):
-        return self.params
 
-    @property
-    def n_samples(self):
-        return self._n_holder
 
-    @property
-    def _approx_nevents(self):
-        nevents = super()._approx_nevents
-        if nevents is None:
-            nevents = self.n
-        return nevents
 
-    @property
-    def hashint(self) -> int | None:
-        return self._hashint_holder.value()
 
     def _update_hash(self):
         super()._update_hash()
@@ -586,16 +470,6 @@ class BinnedSamplerData(BinnedData):
         cls._cache_counting += 1
         return counting
 
-    @classmethod
-    def from_sample(
-        cls,
-        sample_func: Callable,  # noqa: ARG003
-        n: ztyping.NumericalScalarType,  # noqa: ARG003
-        obs: ztyping.ObsTypeInput,  # noqa: ARG003
-        fixed_params=None,  # noqa: ARG003
-    ):
-        msg = " Use `from_sampler` (with `r` at the end instead."
-        raise BreakingAPIChangeError(msg)
 
     @classmethod
     def from_sampler(
@@ -610,76 +484,7 @@ class BinnedSamplerData(BinnedData):
         name: str | None = None,
         label: str | None = None,
     ):
-        """Create a binned sampler from a sample function.
-
-        This is a binned data object that can be modified in-place by updating/resampling the sample.
-
-        Args:
-            sample_func: A function that samples the data.
-            sample_and_variances_func: A function that samples the data and returns the sample and the variances.
-            n: The number of samples to produce.
-            obs: The observables of the data.
-            params: A mapping from :py:class:~`zfit.Parameter` or string (the name) to a fixed value that should be used for the sampling.
-            name: The name of the data object.
-            label: The label of the data object.
-        """
-        if fixed_params is not None:
-            msg = "Use `params` instead of `fixed_params`."
-            raise BreakingAPIChangeError(msg)
-        if int(sample_func is not None) + int(sample_and_variances_func is not None) != 1:
-            msg = "Exactly one of `sample`, `sample_func` or `sample_and_variances_func` must be provided."
-            raise ValueError(msg)
-
-        if sample_func is not None:
-
-            def sample_and_variances_func(n, params, *, sample_func=sample_func):
-                sample = sample_func(n, params=params)
-                return sample, None
-
-            del sample_func
-
-        from ..core.space import convert_to_space  # noqa: PLC0415
-
-        obs = convert_to_space(obs)
-
-        from ..settings import ztypes  # noqa: PLC0415
-
-        dtype = ztypes.float
-
-        params = convert_param_values(params)
-
-        initval, initvar = sample_and_variances_func(n, params=params)  # todo: preprocess, cut data?
-        sample_holder = tf.Variable(
-            initial_value=initval,
-            dtype=dtype,
-            trainable=False,
-            # validate_shape=False,
-            shape=(None,) * obs.n_obs,
-            name=f"sample_hist_holder_{cls.get_cache_counting()}",
-        )
-        if initvar is not None:
-            variances_holder = tf.Variable(
-                initial_value=initvar,
-                dtype=dtype,
-                trainable=False,
-                # validate_shape=False,
-                shape=(None,) * obs.n_obs,
-                name=f"variances_hist_holder_{cls.get_cache_counting()}",
-            )
-        else:
-            variances_holder = None
-        dataset = BinnedHolder(space=obs, values=sample_holder, variances=variances_holder)
-
-        return cls(
-            h=dataset,
-            sample_holder=sample_holder,
-            sample_and_variances_func=sample_and_variances_func,
-            variances_holder=variances_holder,
-            name=name,
-            label=label,
-            params=params,
-            n=n,
-        )
+        pass
 
     def resample(
         self,
@@ -688,36 +493,7 @@ class BinnedSamplerData(BinnedData):
         n: int | tf.Tensor = None,
         param_values: ztyping.ParamValuesMap = None,
     ):
-        """Update the sample by new sampling *inplace*; This affects any object that used this data already.
-
-        All params that are not in the attribute ``params`` will use their current value for
-        the creation of the new sample. The value can also be overwritten for one sampling by providing
-        a mapping with ``param_values`` from ``Parameter`` to the temporary ``value``.
-
-        Args:
-            params: a mapping from :py:class:`~zfit.Parameter` to a `value` that should be used for the sampling.
-                Any parameter that is not in this mapping will use the value in `params`.
-            n: the number of samples to produce. If the `SamplerData` was created with
-                anything else then a numerical or tf.Tensor, this can't be used.
-        """
-        if self._sample_and_variances_func is None:
-            msg = "No sample function provided on initialisation, cannot resample."
-            raise ValueError(msg)
-        if n is None:
-            n = self.n
-
-        if param_values is not None:
-            if params is not None:
-                msg = "Cannot specify both `fixed_params` and `params`."
-                raise ValueError(msg)
-            params = param_values
-        temp_param_values = self.params.copy()
-        if params is not None:
-            params = convert_param_values(params)
-            temp_param_values.update(params)
-
-        new_sample, new_variances = self._sample_and_variances_func(n, params=temp_param_values)
-        self.update_data(new_sample, new_variances)
+        pass
 
     def update_data(self, sample: TensorLike, variances: TensorLike | None = None):
         """Update the data, and optionally the variances, of the sampler in-place.

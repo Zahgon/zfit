@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -83,7 +82,6 @@ class BaseConstraint(ZfitConstraint, BaseNumeric):
         return f"{class_name}(params=[{params_str}])"
 
 
-# TODO: improve arbitrary constraints, should we allow only functions that have a `params` argument?
 class SimpleConstraint(BaseConstraint):
     def __init__(
         self,
@@ -140,7 +138,6 @@ class ProbabilityConstraint(BaseConstraint):
             observation: Observed values of the parameter
                 to constraint obtained from auxiliary measurements.
         """
-        # TODO: proper handling of input params, arrays. ArrayParam?
         if isinstance(params, collections.abc.Mapping):
             params_dict = params
             params = [p for name, p in params.items() if name.startswith("param_")]
@@ -158,17 +155,12 @@ class ProbabilityConstraint(BaseConstraint):
             raise ShapeIncompatibleError(msg)
 
         self._observation = observation  # TODO: needed below? Why?
-        # for obs, p in zip(observation, params):
-        #     obs = convert_to_parameter(obs, f"{p.name}_obs", prefer_constant=False)
-        #     obs.floating = False
-        #     self._observation.append(obs)
 
         self._ordered_params = params
 
     @property
     def observation(self) -> tuple:
-        """Return the observed values of the parameters constrained."""
-        return self._observation
+        pass
 
     def value(self) -> tf.Tensor:
         return self._value()
@@ -194,20 +186,7 @@ class ProbabilityConstraint(BaseConstraint):
         raise NotImplementedError
 
     def _format_observation(self) -> str:
-        """Format observation values for string representation."""
-        obs = self._observation
-        if len(obs) <= 3:
-            obs_strs = []
-            for o in obs:
-                if hasattr(o, "numpy") and tf.executing_eagerly():
-                    obs_strs.append(f"{o.numpy():.4g}")
-                elif hasattr(o, "value") and callable(o.value) and tf.executing_eagerly():
-                    obs_strs.append(f"{o.value():.4g}")
-                else:
-                    obs_strs.append(f"{o:.4g}" if isinstance(o, float | int) else str(o))
-            return ", ".join(obs_strs)
-        else:
-            return f"{len(obs)} values"
+        pass
 
     def __repr__(self) -> str:
         """Return a detailed string representation of the probability constraint."""
@@ -232,9 +211,6 @@ class ProbabilityConstraint(BaseConstraint):
         params_str = ", ".join(param_strs) if param_strs else "none"
         return f"{class_name}(params=[{params_str}], observation=[{self._format_observation()}])"
 
-    @property
-    def _params_array(self) -> tf.Tensor:
-        return znp.asarray(self._ordered_params)
 
 
 class TFProbabilityConstraint(ProbabilityConstraint):
@@ -261,16 +237,6 @@ class TFProbabilityConstraint(ProbabilityConstraint):
         self.dist_params = dist_params
         self.dist_kwargs = dist_kwargs if dist_kwargs is not None else {}
 
-    @property
-    def distribution(self) -> tfd.Distribution:
-        params = self.dist_params
-        if callable(params):
-            params = params(self.observation)
-        kwargs = self.dist_kwargs
-        if callable(kwargs):
-            kwargs = kwargs()
-        params = {k: znp.asarray(v, ztypes.float) for k, v in params.items()}
-        return self._distribution(**params, **kwargs, name=f"{self.name}_tfp")
 
     def _value(self) -> tf.Tensor:
         array = znp.asarray(self._params_array, ztypes.float)
@@ -316,7 +282,6 @@ def _preprocess_gaussian_constr_sigma_var(cov, sigma, legacy_uncertainty) -> tf.
     else:  # legacy 3
         sigma = -999
         cov = -999
-        # end legacy 3
     return sigma, cov
 
 
@@ -363,7 +328,6 @@ class GaussianConstraint(TFProbabilityConstraint, SerializableMixin):
         params = convert_to_container(params, tuple, ignore=np.ndarray)
         params_tuple_legacy = params
 
-        # legacy start 1
         if legacy_uncertainty := uncertainty is not None:
             uncertainty = convert_to_container(uncertainty, tuple, ignore=np.ndarray)
             if isinstance(uncertainty[0], np.ndarray | tf.Tensor) and len(uncertainty) == 1:
@@ -394,7 +358,6 @@ class GaussianConstraint(TFProbabilityConstraint, SerializableMixin):
                     )
                     raise ShapeIncompatibleError(msg)
                 return covariance
-        # legacy end 1
 
         original_init = {
             "observation": observation,
@@ -411,8 +374,6 @@ class GaussianConstraint(TFProbabilityConstraint, SerializableMixin):
 
         distribution = tfd.MultivariateNormalTriL
 
-        def dist_params(observation, *, self=self):
-            return {"loc": observation, "scale_tril": tf.linalg.cholesky(self.covariance)}
 
         dist_kwargs = {"validate_args": True}
 
@@ -436,25 +397,12 @@ class GaussianConstraint(TFProbabilityConstraint, SerializableMixin):
     @property
     def covariance(self) -> tf.Tensor:
         """Return the covariance matrix of the observed values of the parameters constrained."""
-        # legacy start 2
         if self._legacy_uncertainty:
             return self._covariance()
-        # legacy end 2
         return self._covariance(cov=self.__cov)
 
     def _format_sigma(self) -> str:
-        """Format sigma values for string representation."""
-        if self.__sigma is not None and not isinstance(self.__sigma, int):
-            sigma = self.__sigma
-            if hasattr(sigma, "numpy") and tf.executing_eagerly():
-                sigma_arr = sigma.numpy()
-                if sigma_arr.size <= 3:
-                    return ", ".join(f"{s:.4g}" for s in sigma_arr.flatten())
-                else:
-                    return f"{sigma_arr.size} values"
-            else:
-                return "<symbolic>"
-        return "from covariance"
+        pass
 
     def __repr__(self) -> str:
         """Return a detailed string representation of the Gaussian constraint."""
@@ -488,15 +436,7 @@ class GaussianConstraintRepr(BaseConstraintRepr):
     sigma: list[Serializer.types.ParamInputTypeDiscriminated] | None
     cov: list[Serializer.types.ParamInputTypeDiscriminated] | None
 
-    @pydantic.root_validator(pre=True)
-    def get_init_args(cls, values):
-        if cls.orm_mode(values):
-            values = values["hs3"].original_init
-        return values
 
-    @pydantic.validator("params", "observation", "uncertainty", "sigma", "cov")
-    def validate_params(cls, v):
-        return v.tolist() if isinstance(v, np.ndarray) else convert_to_container(v, list)
 
 
 class PoissonConstraint(TFProbabilityConstraint, SerializableMixin):
@@ -546,15 +486,7 @@ class PoissonConstraintRepr(BaseConstraintRepr):
     params: list[Serializer.types.ParamInputTypeDiscriminated]
     observation: list[Serializer.types.ParamInputTypeDiscriminated]
 
-    @pydantic.root_validator(pre=True)
-    def get_init_args(cls, values):
-        if cls.orm_mode(values):
-            values = values["hs3"].original_init
-        return values
 
-    @pydantic.validator("params", "observation")
-    def validate_params(cls, v):
-        return v.tolist() if isinstance(v, np.ndarray) else convert_to_container(v, list)
 
 
 class LogNormalConstraint(TFProbabilityConstraint, SerializableMixin):
@@ -596,8 +528,6 @@ class LogNormalConstraint(TFProbabilityConstraint, SerializableMixin):
 
         distribution = tfd.LogNormal
 
-        def dist_params(observation):
-            return {"loc": observation, "scale": uncertainty}
 
         dist_kwargs = {"validate_args": False}
 
@@ -620,12 +550,4 @@ class LogNormalConstraintRepr(BaseConstraintRepr):
     observation: list[Serializer.types.ParamInputTypeDiscriminated]
     uncertainty: list[Serializer.types.ParamInputTypeDiscriminated]
 
-    @pydantic.root_validator(pre=True)
-    def get_init_args(cls, values):
-        if cls.orm_mode(values):
-            values = values["hs3"].original_init
-        return values
 
-    @pydantic.validator("params", "observation", "uncertainty")
-    def validate_params(cls, v):
-        return v.tolist() if isinstance(v, np.ndarray) else convert_to_container(v, list)

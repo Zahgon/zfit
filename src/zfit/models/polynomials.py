@@ -1,5 +1,3 @@
-#  Copyright (c) 2025 zfit
-"""Recurrent polynomials."""
 
 from __future__ import annotations
 
@@ -44,7 +42,6 @@ def rescale_minus_plus_one(x: tf.Tensor, limits: zfit.Space) -> tf.Tensor:
 
 
 class RecursivePolynomial(BasePDF):
-    """1D polynomial generated via three-term recurrence."""
 
     def __init__(
         self,
@@ -105,7 +102,6 @@ class RecursivePolynomial(BasePDF):
                the PDF for a better description, to be used with plots etc.
                Has no programmatical functional purpose as identification. |@docend:pdf.init.label|
         """
-        # 0th coefficient set to 1 by default
         coeff0 = z.constant(1.0) if coeff0 is None else znp.asarray(coeff0, dtype=ztypes.float)
         coeffs = convert_to_container(coeffs).copy()
         coeffs.insert(0, coeff0)
@@ -122,14 +118,10 @@ class RecursivePolynomial(BasePDF):
             x = rescale_minus_plus_one(x, limits=self.space)
         return x
 
-    @property
-    def apply_scaling(self):
-        return self._apply_scale
 
     @property
     def degree(self):
-        """Int: degree of the polynomial, starting from 0."""
-        return self._degree
+        pass
 
     @supports(norm=False)
     def _pdf(self, x, norm, params):
@@ -149,12 +141,6 @@ class BaseRecursivePolynomialRepr(BasePDFRepr):
     params: Mapping[str, Serializer.types.ParamTypeDiscriminated] = pydantic.Field(alias="coeffs")
     apply_scaling: bool | None
 
-    @pydantic.root_validator(pre=True)
-    def convert_params(cls, values):  # does not propagate `params` into the fields
-        if cls.orm_mode(values):
-            values = dict(values)
-            values["x"] = values.pop("space")
-        return values
 
     def _to_orm(self, init):
         init["coeff0"], *init["coeffs"] = init.pop("params").values()
@@ -179,12 +165,7 @@ legendre_polys = [lambda x: tf.ones_like(x), lambda x: x]
 
 @z.function(wraps="tensor", keepalive=True, stateless_args=False)
 def legendre_recurrence(p1, p2, n, x):
-    """Recurrence relation for Legendre polynomials.
-
-    .. math::
-         (n+1) P_{n+1}(x) = (2n + 1) x P_{n}(x) - n P_{n-1}(x)
-    """
-    return ((2 * n + 1) * znp.multiply(x, p1) - n * p2) / (n + 1)
+    pass
 
 
 def legendre_shape(x, coeffs):
@@ -197,43 +178,7 @@ def legendre_integral(
     params: list[zfit.Parameter],
     model: RecursivePolynomial,
 ):
-    """Recursive integral of Legendre polynomials."""
-    del norm  # not used here
-    lower, upper = limits.limit1d
-    lower_rescaled = model._polynomials_rescale(lower)
-    upper_rescaled = model._polynomials_rescale(upper)
-    # if np.allclose((lower_rescaled, upper_rescaled), (-1, 1)):
-    #     return z.constant(2.)  #
-
-    lower = z.convert_to_tensor(lower_rescaled)
-    upper = z.convert_to_tensor(upper_rescaled)
-
-    integral_0 = params["c_0"] * (upper - lower)  # if polynomial 0 is 1
-    if model.degree == 0:
-        integral = integral_0
-    else:
-
-        def indefinite_integral(limits):
-            max_degree = model.degree + 1  # needed +1 for integral, max poly in term for n is n+1
-            polys = do_recurrence(
-                x=limits,
-                polys=legendre_polys,
-                degree=max_degree,
-                recurrence=legendre_recurrence,
-            )
-            one_limit_integrals = []
-            for degree in range(1, max_degree):
-                coeff = params[f"c_{degree}"]
-                one_limit_integrals.append(
-                    coeff * (polys[degree + 1] - polys[degree - 1]) / (2.0 * (z.convert_to_tensor(degree)) + 1)
-                )
-            return z.reduce_sum(one_limit_integrals, axis=0)
-
-        integral = indefinite_integral(upper) - indefinite_integral(lower) + integral_0
-        integral = znp.reshape(integral, newshape=())
-    integral *= 0.5 * model.space.volume  # rescale back to whole width
-
-    return integral
+    pass
 
 
 class Legendre(RecursivePolynomial, SerializableMixin):
@@ -336,11 +281,7 @@ chebyshev_polys = [lambda x: tf.ones_like(x), lambda x: x]
 
 @z.function(wraps="tensor", keepalive=True, stateless_args=False)
 def chebyshev_recurrence(p1, p2, _, x):
-    """Recurrence relation for Chebyshev polynomials.
-
-    T_{n+1}(x) = 2 x T_{n}(x) - T_{n-1}(x)
-    """
-    return 2 * znp.multiply(x, p1) - p2
+    pass
 
 
 def chebyshev_shape(x, coeffs):
@@ -440,42 +381,6 @@ class ChebyshevRepr(BaseRecursivePolynomialRepr):
     hs3_type: Literal["Chebyshev"] = pydantic.Field("Chebyshev", alias="type")
 
 
-def func_integral_chebyshev1(limits, norm, params, model):
-    del norm  # not used here
-    lower, upper = limits.v1.limits
-    lower_rescaled = model._polynomials_rescale(lower)
-    upper_rescaled = model._polynomials_rescale(upper)
-
-    lower = z.convert_to_tensor(lower_rescaled)
-    upper = z.convert_to_tensor(upper_rescaled)
-
-    integral = params["c_0"] * (upper - lower)  # if polynomial 0 is defined as T_0 = 1
-    if model.degree >= 1:
-        integral += params["c_1"] * 0.5 * (upper**2 - lower**2)  # if polynomial 0 is defined as T_0 = 1
-    if model.degree >= 2:
-
-        def indefinite_integral(limits):
-            max_degree = model.degree + 1
-            polys = do_recurrence(
-                x=limits,
-                polys=chebyshev_polys,
-                degree=max_degree,
-                recurrence=chebyshev_recurrence,
-            )
-            one_limit_integrals = []
-            for degree in range(2, max_degree):
-                coeff = params[f"c_{degree}"]
-                n_float = z.convert_to_tensor(degree)
-                integral = n_float * polys[degree + 1] / (z.square(n_float) - 1) - limits * polys[degree] / (
-                    n_float - 1
-                )
-                one_limit_integrals.append(coeff * integral)
-            return z.reduce_sum(one_limit_integrals, axis=0)
-
-        integral += indefinite_integral(upper) - indefinite_integral(lower)
-        integral = znp.reshape(integral, newshape=())
-    integral *= 0.5 * model.space.volume  # rescale back to whole width
-    return integral[..., 0]
 
 
 chebyshev1_limits_integral = Space(axes=0, limits=(Space.ANY_LOWER, Space.ANY_UPPER))
@@ -565,32 +470,6 @@ class Chebyshev2Repr(BaseRecursivePolynomialRepr):
     hs3_type: Literal["Chebyshev2"] = pydantic.Field("Chebyshev2", alias="type")
 
 
-def func_integral_chebyshev2(limits, norm, params, model):
-    del norm
-    lower, upper = limits.limit1d
-    lower_rescaled = model._polynomials_rescale(lower)
-    upper_rescaled = model._polynomials_rescale(upper)
-
-    lower = z.convert_to_tensor(lower_rescaled)
-    upper = z.convert_to_tensor(upper_rescaled)
-
-    # the integral of cheby2_ni is a cheby1_ni+1/(n+1). We add the (n+1) to the coeffs. The cheby1 shape makes
-    # the sum for us.
-    coeffs_cheby1 = {"c_0": z.constant(0.0, dtype=model.dtype)}
-
-    for name, coeff in params.items():
-        n_plus1 = int(name.split("_", 1)[-1]) + 1
-        coeffs_cheby1[f"c_{n_plus1}"] = coeff / z.convert_to_tensor(n_plus1, dtype=model.dtype)
-    coeffs_cheby1 = convert_coeffs_dict_to_list(coeffs_cheby1)
-
-    def indefinite_integral(limits):
-        return chebyshev_shape(x=limits, coeffs=coeffs_cheby1)
-
-    integral = indefinite_integral(upper) - indefinite_integral(lower)
-    integral = znp.reshape(integral, newshape=())
-    integral *= 0.5 * model.space.volume  # rescale back to whole width
-
-    return integral
 
 
 chebyshev2_limits_integral = Space(axes=0, limits=(Space.ANY_LOWER, Space.ANY_UPPER))
@@ -607,11 +486,7 @@ laguerre_polys = generalized_laguerre_polys_factory(alpha=0.0)
 def generalized_laguerre_recurrence_factory(alpha=0.0):
     @z.function(wraps="tensor", keepalive=True, stateless_args=False)
     def generalized_laguerre_recurrence(p1, p2, n, x):
-        r"""Recurrence relation for Laguerre polynomials.
-
-        :math:`(n+1) L_{n+1}(x) = (2n + 1 + \alpha - x) L_{n}(x) - (n + \alpha) L_{n-1}(x)`
-        """
-        return (znp.multiply(2 * n + 1 + alpha - x, p1) - (n + alpha) * p2) / (n + 1)
+        pass
 
     return generalized_laguerre_recurrence
 
@@ -623,8 +498,6 @@ def generalized_laguerre_shape_factory(alpha=0.0):
     recurrence = generalized_laguerre_recurrence_factory(alpha=alpha)
     polys = generalized_laguerre_polys_factory(alpha=alpha)
 
-    def general_laguerre_shape(x, coeffs):
-        return create_poly(x=x, polys=polys, coeffs=coeffs, recurrence=recurrence)
 
     return general_laguerre_shape
 
@@ -709,40 +582,7 @@ class LaguerreRepr(BaseRecursivePolynomialRepr):
 
 
 def func_integral_laguerre(limits, norm, params: dict, model):
-    r"""The integral of the simple laguerre polynomials.
-
-    Defined as :math:`\int L_{n} = (-1) L_{n+1}^{(-1)}` with :math:`L^{(\alpha)}` the generalized Laguerre polynom.
-
-    Args:
-        limits:
-        norm:
-        params:
-        model:
-
-    Returns:
-    """
-    del norm
-    lower, upper = limits.limit1d
-    lower_rescaled = model._polynomials_rescale(lower)
-    upper_rescaled = model._polynomials_rescale(upper)
-
-    lower = z.convert_to_tensor(lower_rescaled)
-    upper = z.convert_to_tensor(upper_rescaled)
-
-    # The laguerre shape makes the sum for us. setting the 0th coeff to 0, since no -1 term exists.
-    coeffs_laguerre_nup = {
-        f"c_{int(n.split('_', 1)[-1]) + 1}": c for i, (n, c) in enumerate(params.items())
-    }  # increase n -> n+1 of naming
-    coeffs_laguerre_nup["c_0"] = tf.constant(0.0, dtype=model.dtype)
-    coeffs_laguerre_nup = convert_coeffs_dict_to_list(coeffs_laguerre_nup)
-
-    def indefinite_integral(limits):
-        return -1 * laguerre_shape_alpha_minusone(x=limits, coeffs=coeffs_laguerre_nup)
-
-    integral = indefinite_integral(upper) - indefinite_integral(lower)
-    integral = znp.reshape(integral, newshape=())
-    integral *= 0.5 * model.space.volume  # rescale back to whole width
-    return integral
+    pass
 
 
 laguerre_limits_integral = Space(axes=0, limits=(Space.ANY_LOWER, Space.ANY_UPPER))
@@ -753,11 +593,7 @@ hermite_polys = [lambda x: tf.ones_like(x), lambda x: 2 * x]
 
 @z.function(wraps="tensor", keepalive=True, stateless_args=False)
 def hermite_recurrence(p1, p2, n, x):
-    """Recurrence relation for Hermite polynomials (physics).
-
-    :math:`H_{n+1}(x) = 2x H_{n}(x) - 2n H_{n-1}(x)`
-    """
-    return 2 * (znp.multiply(x, p1) - n * p2)
+    pass
 
 
 def hermite_shape(x, coeffs):
@@ -838,31 +674,6 @@ class HermiteRepr(BaseRecursivePolynomialRepr):
     hs3_type: Literal["Hermite"] = pydantic.Field("Hermite", alias="type")
 
 
-def func_integral_hermite(limits, norm, params, model):
-    del norm
-    lower, upper = limits.limit1d
-    lower_rescaled = model._polynomials_rescale(lower)
-    upper_rescaled = model._polynomials_rescale(upper)
-
-    lower = z.convert_to_tensor(lower_rescaled)
-    upper = z.convert_to_tensor(upper_rescaled)
-
-    # the integral of hermite is a hermite_ni. We add the ni to the coeffs.
-    coeffs = {"c_0": z.constant(0.0, dtype=model.dtype)}
-
-    for name, coeff in params.items():
-        ip1_coeff = int(name.split("_", 1)[-1]) + 1
-        coeffs[f"c_{ip1_coeff}"] = coeff / z.convert_to_tensor(ip1_coeff * 2.0, dtype=model.dtype)
-    coeffs = convert_coeffs_dict_to_list(coeffs)
-
-    def indefinite_integral(limits):
-        return hermite_shape(x=limits, coeffs=coeffs)
-
-    integral = indefinite_integral(upper) - indefinite_integral(lower)
-    integral = znp.reshape(integral, newshape=())
-    integral *= 0.5 * model.space.volume  # rescale back to whole width
-
-    return integral
 
 
 hermite_limits_integral = Space(axes=0, limits=(Space.ANY_LOWER, Space.ANY_UPPER))
@@ -956,14 +767,10 @@ class Bernstein(BasePDF, SerializableMixin):
             x = rescale_zero_one(x, limits=self.space)
         return x
 
-    @property
-    def apply_scaling(self):
-        return self._apply_scale
 
     @property
     def degree(self):
-        """Int: degree of the polynomial, starting from 0."""
-        return self._degree
+        pass
 
     @supports(norm=False)
     def _pdf(self, x, norm, params):
@@ -985,43 +792,16 @@ class BernsteinPDFRepr(BasePDFRepr):
     params: Mapping[str, Serializer.types.ParamTypeDiscriminated] = pydantic.Field(alias="coeffs")
     apply_scaling: bool | None
 
-    @pydantic.root_validator(pre=True)
-    def convert_params(cls, values):  # does not propagate `params` into the fields
-        if cls.orm_mode(values):
-            values = dict(values)
-            values["x"] = values.pop("space")
-        return values
 
     def _to_orm(self, init):
         init["coeffs"] = list(init.pop("params").values())
         return super()._to_orm(init)
 
 
-def _coeffs_int(coeffs):
-    n = len(coeffs)
-    r = [0] * (n + 1)
-    for j in range(1, n + 1):
-        for k in range(j):
-            r[j] += coeffs[k]
-    return [rj / n for rj in r]
 
 
-@z.function(wraps="tensor")
-def bernstein_integral_from_xmin_to_x(x, coeffs, limits):
-    x = rescale_zero_one(x, limits)
-    coeffs = _coeffs_int(coeffs)
-    return bernstein_shape(x, coeffs) * limits.volume
 
 
-def func_integral_bernstein(limits, params, model):
-    lower, upper = limits.limit1d
-
-    coeffs = convert_coeffs_dict_to_list(params)
-
-    upper_integral = bernstein_integral_from_xmin_to_x(upper, coeffs, model.space)
-    lower_integral = bernstein_integral_from_xmin_to_x(lower, coeffs, model.space)
-
-    return upper_integral - lower_integral
 
 
 bernstein_limits_integral = Space(axes=0, limits=(Space.ANY_LOWER, Space.ANY_UPPER))
@@ -1029,7 +809,6 @@ Bernstein.register_analytic_integral(func=func_integral_bernstein, limits=bernst
 
 
 def convert_coeffs_dict_to_list(coeffs: Mapping) -> list:
-    # HACK(Mayou36): how to solve elegantly? yield not a param, only a dependent?
     coeffs_list = []
     for i in range(len(coeffs)):
         try:
@@ -1039,4 +818,3 @@ def convert_coeffs_dict_to_list(coeffs: Mapping) -> list:
     return coeffs_list
 
 
-# EOF

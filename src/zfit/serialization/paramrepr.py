@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -20,13 +19,5 @@ def make_param_constructor(constructor):
         Callable that creates the parameter.
     """
 
-    def param_constructor(name, **kwargs):
-        from zfit.serialization import Serializer  # noqa: PLC0415
-
-        previous_existing = Serializer._existing_params
-
-        if (param := previous_existing.get(name)) is None:
-            Serializer._existing_params[name] = (param := constructor(name=name, **kwargs))
-        return param
 
     return param_constructor

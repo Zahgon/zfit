@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -42,93 +41,25 @@ class SerializableMixin(ZfitSerializable):
 
     @warn_experimental_feature
     def to_yaml(self) -> str:
-        """Convert the object to a yaml string.
-
-        Returns:
-            The yaml string.
-        """
-        json_obj = self.to_json()
-        return yaml.safe_dump(json_obj)
+        pass
 
     @warn_experimental_feature
     def to_asdf(self):
-        """Convert the object to an asdf file."""
-        try:
-            import asdf  # noqa: PLC0415
-        except ImportError as error:
-            msg = "The asdf module is not installed. Please install zfit with the extra `hs3` (i.e. `pip install zfit[sh3]` or asdf directry to use this feature."
-            raise ImportError(msg) from error
-
-        return asdf.AsdfFile(self.to_dict(), memmap=False)
+        pass
 
     @classmethod
     @warn_experimental_feature
     def from_asdf(cls, asdf_obj, *, reuse_params=None):
-        """Load an object from an asdf file.
-
-        Args:
-            asdf_obj: Object
-            reuse_params: |@doc:hs3.ini.reuse_params| If parameters, the parameters
-                   will be reused if they are given.
-                   If a parameter is given, it will be used as the parameter
-                   with the same name. If a parameter is not given, a new
-                   parameter will be created. |@docend:hs3.ini.reuse_params|
-        """
-
-        from zfit.serialization import Serializer  # noqa: PLC0415
-
-        with Serializer.initialize(reuse_params=reuse_params):
-            asdf_tree = asdf_obj.tree
-            # cleanup the asdf chunk
-            asdf_tree.pop("asdf_library", None)
-            asdf_tree.pop("history", None)
-            return cls.from_dict(asdf_tree)
+        pass
 
     @warn_experimental_feature
     def to_json(self) -> str:
-        """Convert the object to a json string.
-
-        Returns:
-            The json string.
-        """
-        from zfit.serialization import Serializer  # noqa: PLC0415
-
-        with Serializer.initialize():
-            repr = self.get_repr()
-            orm = repr.from_orm(self)
-            try:
-                json_obj = orm.json(exclude_none=True, by_alias=True)
-            except TypeError as error:
-                if "Object of type 'ndarray' is not JSON serializable" in str(error):
-                    msg = (
-                        "The object you are trying to serialize contains numpy arrays. "
-                        "This is not supported by json. Please use `to_asdf` (or `to_dict)` instead."
-                    )
-                    raise NumpyArrayNotSerializableError(msg) from error
-                raise
-        return json_obj
+        pass
 
     @classmethod
     @warn_experimental_feature
     def from_json(cls, json: str, *, reuse_params=None) -> object:
-        """Load an object from a json string.
-
-        Args:
-            json: Serialized object in a JSON string.
-            reuse_params: |@doc:hs3.ini.reuse_params| If parameters, the parameters
-                   will be reused if they are given.
-                   If a parameter is given, it will be used as the parameter
-                   with the same name. If a parameter is not given, a new
-                   parameter will be created. |@docend:hs3.ini.reuse_params|
-
-        Returns:
-            The deserialized object.
-        """
-        from zfit.serialization import Serializer  # noqa: PLC0415
-
-        with Serializer.initialize(reuse_params=reuse_params):
-            parsed = cls.get_repr().parse_raw(json)
-            return parsed.to_orm()
+        pass
 
     @warn_experimental_feature
     def to_dict(self) -> dict:
@@ -191,23 +122,7 @@ class HS3:
         self._obj = weakref.ref(obj)
         self.original_init = {}
 
-    @property
-    def obj(self):
-        return self._obj()
 
-    def to_json(self):
-        orm = self.repr.from_orm(self)
-        try:
-            json_obj = orm.json(exclude_none=True, by_alias=True)
-        except TypeError as error:
-            if "TypeError: Object of type 'ndarray' is not JSON serializable" in str(error):
-                msg = (
-                    "The object you are trying to serialize contains numpy arrays. "
-                    "This is not supported by json. Please use `to_asdf` (or `to_dict)` instead."
-                )
-                raise TypeError(msg) from error
-            raise
-        return json_obj
 
     def to_dict(self):
         orm = self.repr.from_orm(self)
@@ -215,28 +130,8 @@ class HS3:
 
     @classmethod
     def from_json(cls, json: str, *, reuse_params: bool | None = None) -> object:
-        """Load an object from a json string.
+        pass
 
-        Args:
-            json (str): Serialized object in a JSON string.
-            reuse_params (bool, optional): |@doc:hs3.ini.reuse_params| If parameters, the parameters
-                   will be reused if they are given.
-                   If a parameter is given, it will be used as the parameter
-                   with the same name. If a parameter is not given, a new
-                   parameter will be created. |@docend:hs3.ini.reuse_params|
-
-        Returns:
-            object:
-        """
-        from zfit.serialization import Serializer  # noqa: PLC0415
-
-        with Serializer.initialize(reuse_params=reuse_params):
-            parsed = cls.implementation.get_repr().parse_raw(json)
-            return parsed.to_orm()
-
-    @property
-    def repr(self):
-        return self.obj.get_repr()
 
 
 def create_HS3(cls):

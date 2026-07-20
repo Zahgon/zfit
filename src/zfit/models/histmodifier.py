@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -77,10 +76,6 @@ class BinwiseScaleModifier(BaseBinnedFunctorPDF):
             if modifiers:
                 import zfit  # noqa: PLC0415
 
-                def sumfunc(params):
-                    del params  # unused
-                    values = self.counts()
-                    return znp.sum(values)
 
                 from zfit.core.parameter import get_auto_number  # noqa: PLC0415
 

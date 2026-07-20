@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -37,7 +36,6 @@ if typing.TYPE_CHECKING:
 
 class NLoptBaseMinimizer(BaseMinimizer):
     _ALL_NLOPT_TOL = (
-        # 'fatol',
         "ftol",
         "xatol",
         "xtol",
@@ -166,7 +164,6 @@ class NLoptBaseMinimizer(BaseMinimizer):
                 internal_tols[nlopt_tol] = None
         self._internal_tols = internal_tols
 
-        # private kept variables
         self._internal_maxiter = 20
         self._nrandom_max = 5
 
@@ -187,32 +184,18 @@ class NLoptBaseMinimizer(BaseMinimizer):
             assign_values(params=params, values=init)
         evaluator = self.create_evaluator(loss, params)
 
-        # create minimizer instance
         minimizer = nlopt.opt(nlopt.LD_LBFGS, len(params))
 
-        # initial values as array
         xvalues = initial_xvalues = np.asarray(params)
 
-        # get and set the limits
         lower = np.array([p.lower for p in params])
         upper = np.array([p.upper for p in params])
         minimizer.set_lower_bounds(lower)
         minimizer.set_upper_bounds(upper)
 
-        # create and set objective function. Either returns only the value or the value
-        # and sets the gradient in-place
-        def obj_func(x, grad):
-            if grad.size > 0:
-                value, gradients = evaluator.value_gradient(x)
-                grad[:] = np.asarray(gradients)
-            else:
-                value = evaluator.value(x)
-
-            return float(value)
 
         minimizer.set_min_objective(obj_func)
 
-        # set maximum number of iterations, also set in evaluator
         minimizer.set_maxeval(self.get_maxiter(len(params)))
 
         minimizer_options = self.minimizer_options.copy()
@@ -236,7 +219,6 @@ class NLoptBaseMinimizer(BaseMinimizer):
 
         criterion = self.criterion(tol=self.tol, loss=loss, params=params)
         init_tol = min([math.sqrt(loss.errordef * self.tol), loss.errordef * self.tol * 1e3])
-        # init_tol *= 10
         internal_tol = self._internal_tols
         internal_tol = {tol: init_tol if init is None else init for tol, init in internal_tol.items()}
         if "xtol" in internal_tol:
@@ -270,7 +252,6 @@ class NLoptBaseMinimizer(BaseMinimizer):
                 criterion_value=criterion_value,
             )
 
-            # some (global) optimizers use a local minimizer, set that here
             if local_minimizer is not None:
                 self._set_tols_inplace(
                     minimizer=local_minimizer,
@@ -280,7 +261,6 @@ class NLoptBaseMinimizer(BaseMinimizer):
 
                 minimizer.set_local_optimizer(local_minimizer)
 
-            # run the minimization
             try:
                 xvalues = minimizer.optimize(xvalues)
             except MaximumIterationReached:
@@ -342,7 +322,6 @@ class NLoptBaseMinimizer(BaseMinimizer):
             if converged or maxiter_reached:
                 break
 
-            # update the tols
             self._update_tol_inplace(criterion_value=criterion_value, internal_tol=internal_tol)
 
         else:
@@ -364,13 +343,10 @@ class NLoptBaseMinimizer(BaseMinimizer):
         )
 
     def _set_tols_inplace(self, minimizer, internal_tol, criterion_value):
-        # set all the tolerances
         if (fatol := internal_tol.get("fatol")) is not None:
             minimizer.set_ftol_abs(fatol**0.5)
         if (xatol := internal_tol.get("xatol")) is not None:
-            # minimizer.set_xtol_abs([xatol] * len(params))
             minimizer.set_xtol_abs(xatol)
-        # set relative tolerances later as it can be unstable. Just use them when approaching
         if criterion_value is not None:
             tol_factor_full = self.tol / criterion_value
             if tol_factor_full < 1e-8:
@@ -380,7 +356,6 @@ class NLoptBaseMinimizer(BaseMinimizer):
 
                 xtol = internal_tol.get("xtol")
                 if xtol is not None:
-                    # minimizer.set_xtol_rel([xtol] * len(params))  # TODO: one value or vector?
                     minimizer.set_xtol_rel(xtol)  # TODO: one value or vector?
 
 
@@ -481,9 +456,6 @@ class NLoptLBFGS(NLoptBaseMinimizer):
             maxiter=maxiter,
         )
 
-        @property
-        def maxcor(self):
-            return self.minimizer_options.get("maxcor")
 
 
 class NLoptShiftVar(NLoptBaseMinimizer):
@@ -592,13 +564,7 @@ class NLoptShiftVar(NLoptBaseMinimizer):
             maxiter=maxiter,
         )
 
-        @property
-        def rank(self):
-            return self._rank
 
-        @property
-        def maxcor(self):
-            return self.minimizer_options.get("maxcor")
 
 
 class NLoptTruncNewton(NLoptBaseMinimizer):
@@ -693,9 +659,6 @@ class NLoptTruncNewton(NLoptBaseMinimizer):
             maxiter=maxiter,
         )
 
-        @property
-        def maxcor(self):
-            return self.minimizer_options.get("maxcor")
 
 
 class NLoptSLSQP(NLoptBaseMinimizer):

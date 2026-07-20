@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -17,39 +16,11 @@ if typing.TYPE_CHECKING:
 
 
 def unbinned_to_hist_eager_edgesweightsargs(values, *edges_weights):
-    """Same as `unbinned_to_hist_eager` but with the edges and weights as positional arguments.
-
-    This is needed to circumvent the limitation of `tf.numpy_function` that only allows
-    numpy arrays as positional arguments and not structures of numpy arrays, such as edges are.
-
-    Args:
-        values:
-        *edges_weights:
-
-    Returns:
-    """
-    *edges, weights = edges_weights
-    return unbinned_to_hist_eager(values, edges, weights=weights)
+    pass
 
 
 def unbinned_to_hist_eager(values, edges, weights=None) -> tuple[znp.ndarray, znp.ndarray]:
-    """Convert an unbinned dataset to a binned dataset in eager mode.
-
-    Args:
-        values: Unbinned dataset to convert.
-        edges: Edges of the bins.
-        weights: Event weights.
-
-    Returns:
-        Tuple of (values, variances) as binned data.
-    """
-    if weights is not None and weights.shape == () and None in weights:
-        weights = None
-    binning = [hist.axis.Variable(np.reshape(edge, (-1,)), flow=False) for edge in edges]
-    h = hist.Hist(*binning, storage=hist.storage.Weight())
-    h.fill(*(values[:, i] for i in range(values.shape[1])), weight=weights)
-
-    return znp.array(h.values(flow=False), znp.float64), znp.array(h.variances(flow=False), znp.float64)
+    pass
 
 
 def unbinned_to_binned(data, space, binned_class=None, initkwargs=None):

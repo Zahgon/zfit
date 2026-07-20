@@ -1,12 +1,4 @@
-"""Constraint and transform system for Bayesian priors.
 
-This module provides a systematic approach to handling parameter constraints
-and transformations, similar to PyMC's transform system and TensorFlow
-Probability's bijectors. This enables automatic handling of bounded parameters
-while maintaining proper probability densities.
-"""
-
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -19,7 +11,6 @@ import zfit.z.numpy as znp
 
 
 class ConstraintType(Enum):
-    """Types of parameter constraints supported."""
 
     UNCONSTRAINED = "unconstrained"
     POSITIVE = "positive"  # [0, ∞)
@@ -30,12 +21,6 @@ class ConstraintType(Enum):
 
 
 class Transform(ABC):
-    """Abstract base class for parameter transforms.
-
-    Transforms map between constrained and unconstrained spaces,
-    enabling efficient MCMC sampling on the unconstrained real line
-    while maintaining proper parameter constraints.
-    """
 
     @abstractmethod
     def forward(self, x):
@@ -56,60 +41,30 @@ class Transform(ABC):
 
 
 class IdentityTransform(Transform):
-    """Identity transform for unconstrained parameters."""
+    pass
 
-    def forward(self, x):
-        return x
 
-    def inverse(self, y):
-        return y
 
-    def log_abs_det_jacobian(self, x):
-        return znp.zeros_like(x)
 
-    @property
-    def constraint_type(self) -> ConstraintType:
-        return ConstraintType.UNCONSTRAINED
 
 
 class LogTransform(Transform):
-    """Log transform for positive parameters: y = exp(x)."""
+    pass
 
-    def forward(self, x):
-        return znp.exp(x)
 
-    def inverse(self, y):
-        return znp.log(y)
 
-    def log_abs_det_jacobian(self, x):
-        return x  # d/dx exp(x) = exp(x), log(exp(x)) = x
 
-    @property
-    def constraint_type(self) -> ConstraintType:
-        return ConstraintType.POSITIVE
 
 
 class SigmoidTransform(Transform):
-    """Sigmoid transform for unit interval parameters: y = sigmoid(x)."""
+    pass
 
-    def forward(self, x):
-        return tf.nn.sigmoid(x)
 
-    def inverse(self, y):
-        return znp.log(y / (1 - y))  # logit
 
-    def log_abs_det_jacobian(self, x):
-        # d/dx sigmoid(x) = sigmoid(x) * (1 - sigmoid(x))
-        sigmoid_x = tf.nn.sigmoid(x)
-        return znp.log(sigmoid_x) + znp.log(1 - sigmoid_x)
 
-    @property
-    def constraint_type(self) -> ConstraintType:
-        return ConstraintType.UNIT_INTERVAL
 
 
 class AffineTransform(Transform):
-    """Affine transform for custom bounds: y = a + (b-a) * sigmoid(x)."""
 
     def __init__(self, lower: float, upper: float):
         if lower >= upper:
@@ -119,70 +74,32 @@ class AffineTransform(Transform):
         self.upper = float(upper)
         self.scale = self.upper - self.lower
 
-    def forward(self, x):
-        return self.lower + self.scale * tf.nn.sigmoid(x)
 
-    def inverse(self, y):
-        normalized = (y - self.lower) / self.scale
-        return znp.log(normalized / (1 - normalized))  # logit
 
-    def log_abs_det_jacobian(self, x):
-        # d/dy = scale * sigmoid(x) * (1 - sigmoid(x))
-        sigmoid_x = tf.nn.sigmoid(x)
-        return znp.log(self.scale) + znp.log(sigmoid_x) + znp.log(1 - sigmoid_x)
 
-    @property
-    def constraint_type(self) -> ConstraintType:
-        return ConstraintType.CUSTOM_BOUNDS
 
 
 class LowerBoundTransform(Transform):
-    """Lower bound transform: y = lower + exp(x)."""
 
     def __init__(self, lower: float):
         self.lower = float(lower)
 
-    def forward(self, x):
-        return self.lower + znp.exp(x)
 
-    def inverse(self, y):
-        return znp.log(y - self.lower)
 
-    def log_abs_det_jacobian(self, x):
-        return x  # d/dx (lower + exp(x)) = exp(x), log(exp(x)) = x
 
-    @property
-    def constraint_type(self) -> ConstraintType:
-        return ConstraintType.LOWER_BOUNDED
 
 
 class UpperBoundTransform(Transform):
-    """Upper bound transform: y = upper - exp(x)."""
 
     def __init__(self, upper: float):
         self.upper = float(upper)
 
-    def forward(self, x):
-        return self.upper - znp.exp(x)
 
-    def inverse(self, y):
-        return znp.log(self.upper - y)
 
-    def log_abs_det_jacobian(self, x):
-        return x  # d/dx (upper - exp(x)) = -exp(x), log(|-exp(x)|) = log(exp(x)) = x
 
-    @property
-    def constraint_type(self) -> ConstraintType:
-        return ConstraintType.UPPER_BOUNDED
 
 
 class PriorConstraint:
-    """Constraint specification for a prior distribution.
-
-    This class encapsulates the constraint type, bounds, and associated
-    transform for a prior distribution, providing a unified interface
-    for handling parameter constraints.
-    """
 
     def __init__(
         self,
@@ -247,7 +164,6 @@ class PriorConstraint:
         return f"PriorConstraint({self.constraint_type.value}, bounds={self.bounds})"
 
 
-# Predefined constraint objects for common use cases
 UNCONSTRAINED = PriorConstraint(ConstraintType.UNCONSTRAINED)
 POSITIVE = PriorConstraint(ConstraintType.POSITIVE, bounds=(0, float("inf")))
 UNIT_INTERVAL = PriorConstraint(ConstraintType.UNIT_INTERVAL, bounds=(0, 1))
@@ -275,7 +191,6 @@ def validate_parameter(name: str, value, constraint: PriorConstraint | None = No
     if constraint is None:
         return
 
-    # Check constraint-specific validations
     if constraint.constraint_type == ConstraintType.POSITIVE:
         if val <= 0:
             msg = f"Parameter '{name}' must be positive, got {val}"

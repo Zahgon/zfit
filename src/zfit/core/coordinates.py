@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -69,21 +68,15 @@ class Coordinates(ZfitOrderableDimensional):
 
     @property
     def obs(self) -> ztyping.ObsTypeReturn:
-        """Return the observables, string identifier for the coordinate system."""
-        return self._obs
+        pass
 
     @property
     def axes(self) -> ztyping.AxesTypeReturn:
-        """Return the axes, integer based identifier(indices) for the coordinate system."""
-        return self._axes
+        pass
 
     @property
     def n_obs(self) -> int:
-        """Return the number of observables, the dimensionality.
-
-        Corresponds to the last dimension.
-        """
-        return self._n_obs
+        pass
 
     def with_obs(
         self,

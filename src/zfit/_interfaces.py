@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -18,7 +17,6 @@ if typing.TYPE_CHECKING:
 
 
 class ZfitObject:
-    # TODO: make abstractmethod?
     pass
 
 
@@ -407,7 +405,6 @@ class ZfitLimit(abc.ABC, metaclass=ABCMeta):
         """Whether there are limits set and they are not false."""
         raise NotImplementedError
 
-    # TODO: remove from API?
     def get_subspace(self, *_, **__):
         from zfit.util.exception import InvalidLimitSubspaceError  # noqa: PLC0415
 
@@ -524,28 +521,24 @@ class ZfitSpace(ZfitLimit, ZfitOrderableDimensional, ZfitObject, metaclass=ABCMe
         """Return the number of limits."""
         raise NotImplementedError
 
-    # TODO: legacy?
     @property
     @abstractmethod
     def limits(self) -> tuple[ztyping.LowerTypeReturn, ztyping.UpperTypeReturn]:
         """Return the tuple(lower, upper)."""
         raise NotImplementedError
 
-    # TODO: legacy?
     @property
     @abstractmethod
     def lower(self) -> ztyping.LowerTypeReturn:
         """Return the lower limits."""
         raise NotImplementedError
 
-    # TODO: legacy?
     @property
     @abstractmethod
     def upper(self) -> ztyping.UpperTypeReturn:
         """Return the upper limits."""
         raise NotImplementedError
 
-    # TODO: legacy?
     @abstractmethod
     def _legacy_area(self) -> float:
         """Return the total area of all the limits and axes.
@@ -692,7 +685,6 @@ class ZfitParameter(ZfitNumericParametrized):
     def name(self) -> str:
         raise NotImplementedError
 
-    # TODO: maybe add to numerics?
     @property
     @abstractmethod
     def shape(self):
@@ -712,9 +704,6 @@ class ZfitParameter(ZfitNumericParametrized):
     def value(self) -> tf.Tensor:
         raise NotImplementedError
 
-    # @abstractmethod
-    # def read_value(self) -> tf.Tensor:
-    #     raise NotImplementedError
 
     @property
     @abstractmethod
@@ -987,8 +976,7 @@ class ZfitPDF(ZfitModel):
 
     @property
     def plot(self) -> zfit.util.plotter.ZfitPDFPlotter:
-        """Plot the PDF using the :py:class:`~zfit.PDFPlotter`."""
-        return self._plot
+        pass
 
 
 class ZfitFunctorMixin:
@@ -1031,9 +1019,6 @@ class ZfitBinnedData(ZfitDimensional, ZfitMinimalHist, metaclass=ABCMeta):
     def with_obs(self, obs) -> ZfitBinnedData:
         raise NotImplementedError
 
-    # @abstractmethod
-    # def counts(self):  # TODO: name?
-    #     raise NotImplementedError
 
     @abstractmethod
     def binning(self):
@@ -1076,7 +1061,6 @@ class ZfitRectBinning(ZfitBinning):
 
 
 class ZfitSampler(ZfitObject):
-    """Base class for MCMC samplers in Bayesian inference."""
 
     def __init__(self, name=None):
         """Initialize a sampler.
@@ -1106,7 +1090,6 @@ class ZfitSampler(ZfitObject):
 
 
 class ZfitPrior(ZfitObject):
-    """Base class for parameter priors in Bayesian inference."""
 
     def __init__(self, pdf, name=None):
         """Initialize a prior distribution.

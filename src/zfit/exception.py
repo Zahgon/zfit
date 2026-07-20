@@ -1,9 +1,3 @@
-#  Copyright (c) 2025 zfit
-"""Exceptions that are raised by zfit.
-
-Some are to provide a more specific error message, others are to steer the execution by raising an error that will be
-caught in the right place.
-"""
 
 from __future__ import annotations
 
@@ -59,7 +53,7 @@ __all__ = [
 
 
 class InvalidNameError(Exception):
-    """Exception raised when a name is invalid."""
+    pass
 
 
 class NameAlreadyTakenError(Exception):

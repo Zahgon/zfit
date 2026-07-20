@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -33,7 +32,6 @@ def check_limits(limits: ZfitSpace | list[ZfitSpace], obs=None) -> tuple[ZfitSpa
 
     newlimits = []
     if limits is not None:
-        # check if it's a list of exactly two limits given as numbers or arrays
         if (
             obs is not None
             and (
@@ -74,26 +72,6 @@ def check_overlap(limits: Iterable[ZfitSpace]) -> tuple[ZfitSpace, ...]:
     return limits
 
 
-# TODO: implement smart limits
-# def create_subset_limits(limits, constraints):
-#     limits = check_limits(limits)
-#     newlimits = []
-#     obs = limits[0].obs
-#     axes = obs.axis
-#     for limit in limits:
-#         if not limit.ndims == 1:
-#             raise ValueError(f"Limit {limit} is not 1-dimensional.")
-#         newlower, newupper = None, None
-#         for constr in constraints:
-#             if constr.v1.lower <= limit.v1.lower <= constr.v1.upper:
-#                 assert newlower is None, "Multiple limits overlap with the same limit, should have been caught before. All limits: {limits}"
-#                 newlower = max(limit.v1.lower, constr.v1.lower)
-#             if newlower and constr.v1.lower <= limit.v1.upper <= constr.v1.upper:
-#                 assert newupper is None, "Multiple limits overlap with the same limit, should have been caught before. All limits: {limits}"
-#                 newupper = min(limit.v1.upper, constr.v1.upper)
-#         if newlower is not None and newupper is not None:
-#             newlimits.append(Space(obs=obs, lower=newlower, upper=newupper, axes=axes))
-#             break
 
 
 class TruncatedPDF(BaseFunctor, SerializableMixin):
@@ -172,11 +150,6 @@ class TruncatedPDF(BaseFunctor, SerializableMixin):
         if extended is True and pdf.is_extended:
             paramname = "wrapped_yield"
 
-            def scaled_yield(params: dict[str, tf.Tensor]) -> tuple[tf.Tensor]:
-                base_norm = pdf.integrate(limits=obs, norm=False)
-                piecewise_norms = znp.asarray([pdf.integrate(limits=limit, norm=False) for limit in self._limits])
-                relative_scale = znp.sum(piecewise_norms / base_norm)
-                return (params[paramname] * relative_scale,)
 
             import zfit  # noqa: PLC0415
 
@@ -203,15 +176,8 @@ class TruncatedPDF(BaseFunctor, SerializableMixin):
             raise ValueError(msg)
         self.hs3.original_init.update(original_init)
 
-    @property
-    def limits(self):
-        return self._limits
 
     def _unnormalized_pdf(self, x):
-        # the implementation only feeds the pdf with data that is inside the limits that we want to evaluate
-        # this maybe has a speedup (although limited as we're using dynamic shapes -> needs to change for JAX)
-        # but most importantly avoids any issue if we take the gradient of a pdf that is not defined outside
-        # the limits, because this can yield NaNs using a naive multiplication with a mask
         from zfit import Data  # noqa: PLC0415
 
         xarray = znp.asarray(x.value())
@@ -225,7 +191,6 @@ class TruncatedPDF(BaseFunctor, SerializableMixin):
     @supports()
     def _integrate(self, limits, norm, options=None):
         del norm  # not used here
-        # cannot equal, as possibly jitted
         from zfit import run  # noqa: PLC0415
 
         if (
@@ -235,14 +200,12 @@ class TruncatedPDF(BaseFunctor, SerializableMixin):
         limits = convert_to_container(
             self.limits
         )  # if it's the overarching limits, we can just use our own ones, the real ones
-        # limits = create_subset_limits(limits, self.limits)  # TODO: be smart about limits, we would not need to throw the SpecificFunctionNotImplemented
         integrals = [self.pdfs[0].integrate(limits=limit, norm=False, options=options) for limit in limits]
         return znp.sum(integrals, axis=0)
 
     @supports()
     def _analytic_integrate(self, limits, norm):
         del norm  # not used here
-        # cannot equal, as possibly jitted
         from zfit import run  # noqa: PLC0415
 
         if (
@@ -252,17 +215,13 @@ class TruncatedPDF(BaseFunctor, SerializableMixin):
         limits = convert_to_container(
             self.limits
         )  # if it's the overarching limits, we can just use our own ones, the real ones
-        # limits = create_subset_limits(limits, self.limits)  # TODO: be smart about limits, we would not need to throw the SpecificFunctionNotImplemented
         integrals = [self.pdfs[0].analytic_integrate(limits=limit, norm=False) for limit in limits]
         return znp.sum(integrals, axis=0)
 
-    # TODO: we could make sampling more efficient by only sampling the relevant ranges, however, that would
-    # mean we need to check if the limits of the pdf are within the limits given
     @supports()
     def _sample(self, n, limits):
         pdf = self.pdfs[0]
 
-        # TODO: cannot compare, as possibly jitted
         from zfit import run  # noqa: PLC0415
 
         if (
@@ -270,7 +229,6 @@ class TruncatedPDF(BaseFunctor, SerializableMixin):
         ):  # we could also do it, but would need to check each limit
             raise SpecificFunctionNotImplemented
         limits = self.limits
-        # should be `self.integrate`, but as we do it numerically currently, more efficient to use pdf
         if len(limits) > 1:
             integrals = znp.concatenate([pdf.integrate(limits=limit, norm=False) for limit in limits])
             fracs = integrals / znp.sum(integrals, axis=0)  # norm

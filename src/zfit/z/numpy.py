@@ -1,14 +1,4 @@
-"""Numpy like interface for math functions and arrays. This module is intended to replace tensorflow specific methods
-and datastructures with equivalent or similar versions in the numpy api. This should help make zfit as a project
-portable to alternatives of tensorflow should it be necessary in the future. At the moment it is simply an alias for the
-numpy api of tensorflow. See https://www.tensorflow.org/guide/tf_numpy for more a guide to numpy api in tensorflow. See
-https://www.tensorflow.org/api_docs/python/tf/experimental/numpy for the complete numpy api in tensorflow. Recommended
-way of importing:
 
->>> import zfit.z.numpy as znp
-"""
-
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -19,7 +9,6 @@ from tensorflow.experimental.numpy import *  # noqa: F403
 
 if typing.TYPE_CHECKING:
     import zfit  # noqa: F401
-# ruff: noqa: F405
 
 
 class linalg:
@@ -28,7 +17,6 @@ class linalg:
     solve = staticmethod(tf.linalg.solve)
 
 
-# TODO: move into special namespace when that's available
 def faddeeva_humlicek(z, s=10.0) -> tf.Tensor:
     """Complex error function w(z = x + iy) combining Humlicek's rational approximations.
 

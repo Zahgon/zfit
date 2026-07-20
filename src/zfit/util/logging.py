@@ -1,13 +1,4 @@
-"""This module controls the zfit logging.
 
-The base logger for zfit is called `zfit`, and all loggers created by this module
-have the form `zfit.XX`, where `XX` is their name.
-
-By default, time, name of the logger and message with the default
-colorlog color scheme are printed.
-"""
-
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import logging
@@ -57,30 +48,24 @@ def get_logger(name, stdout_level=None, file_level=None, file_name=None):
     format_file = "%(asctime)s - %(name)s | %(levelname)-8s | %(message)s"
     logger = logging.getLogger(name)
     if not logger.handlers:
-        # Add Stream handler
         formatter = colorlog.ColoredFormatter(format_stream)
         stream = logging.StreamHandler()
         stream.setFormatter(formatter)
         logger.addHandler(stream)
-    # The first handler is always the stream
 
     logger.handlers[0].setLevel(stdout_level)
-    # Now the file handler
     file_handler = None
-    # Find the file handler
     for handler in logger.handlers:
         if isinstance(handler, logging.FileHandler) and (
             not file_name or Path.resolve(file_name) == handler.baseFilename
         ):
             file_handler = handler
             break
-    # If requested, create one
     if file_name and file_handler is None:
         formatter = colorlog.ColoredFormatter(format_file)
         file_handler = logging.FileHandler(file_name)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
-    # Set its level
     if file_level is not None and file_handler is None:
         msg = "Requested change in file log level but no file logger has been  configured"
         raise ValueError(msg)
@@ -88,7 +73,6 @@ def get_logger(name, stdout_level=None, file_level=None, file_name=None):
         file_level = logging.WARNING
     if file_handler is not None:
         file_handler.setLevel(file_level)
-    # Set the logging level to the lowest level
     logger_level = min(stdout_level, file_level)
     logger.setLevel(logger_level)
     return logger

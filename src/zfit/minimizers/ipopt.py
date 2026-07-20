@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -22,7 +21,6 @@ class Ipyopt(BaseMinimizer):
     _ALL_IPOPT_TOL = (
         "tiny_step_tol",  # xatol
         "tiny_step_y_tol",  # fatol
-        # 'tiny_step_y_tol',  # fatol
     )
 
     def __init__(
@@ -184,22 +182,7 @@ class Ipyopt(BaseMinimizer):
         if hessian is None:
             hessian = "bfgs"
 
-        # adjusted for the problems of ~1 K parameters
         default_options = {
-            # "mu_strategy": "adaptive",  # Dynamically adjusts barrier parameter
-            # "mu_oracle": "quality-function",  # Controls how barrier parameter is computed
-            # "mu_init": 0.1,  # Higher values promote more exploration
-            # "mu_max": 1e3,  # Allow larger barrier values for exploration
-            # # Hessian regularization
-            # "max_hessian_perturbation": 100.0,  # Lower than default to allow larger steps
-            # "perturb_inc_fact_first": 20.0,  # Controls first perturbation increase
-            # "perturb_inc_fact": 3.0,  # Increase factor for perturbations
-            # "perturb_dec_fact": 0.6,  # Decrease factor for perturbations
-            # # Line search settings
-            # "alpha_red_factor": 0.8,  # Higher value for more cautious steps
-            # "max_soc": 8,  # Increase second-order correction steps
-            # "watchdog_shortened_iter_trigger": 5,  # Trigger watchdog procedure earlier
-            # "nlp_scaling_method": "gradient-based",  # Use gradient-based scaling
         }
         options = default_options if options is None else (default_options | options)
         minimizer_options["hessian"] = hessian
@@ -265,10 +248,8 @@ class Ipyopt(BaseMinimizer):
         evaluator = self.create_evaluator(numpy_converter=np.array)
         criterion = self.create_criterion()
 
-        # initial values as array
         xvalues = np.array(params)
 
-        # get and set the limits
         lower = np.array([p.lower for p in params])
         upper = np.array([p.upper for p in params])
         np.array([p.stepsize if p.stepsize is not None else 1.0 for p in params])
@@ -279,9 +260,6 @@ class Ipyopt(BaseMinimizer):
 
         minimizer_options = self.minimizer_options.copy()
 
-        def gradient_inplace(x, out):
-            gradient = evaluator.gradient(x)
-            out[:] = gradient
 
         ipopt_options = minimizer_options.pop("ipopt").copy()
         print_level = self.verbosity
@@ -313,9 +291,6 @@ class Ipyopt(BaseMinimizer):
         }
         if hessian == "zfit":
 
-            def hessian_inplace(x, out):
-                hessian = evaluator.hessian(x)
-                out[:] = hessian
 
             minimizer_kwargs["eval_h"] = hessian_inplace
         elif hessian == "exact":
@@ -324,17 +299,12 @@ class Ipyopt(BaseMinimizer):
         else:
             ipopt_options["hessian_approximation"] = "limited-memory"
             ipopt_options["limited_memory_update_type"] = hessian
-            # ipopt_options["constr_viol_tol"] = 1e-15
-            # ipopt_options["limited_memory_initialization"] = "scalar2"
-            # ipopt_options["limited_memory_init_val"] = 0.1  # (np.min(stepsize) + np.mean(stepsize)) / 2
-        # ipopt_options['dual_inf_tol'] = TODO?
 
         minimizer = ipyopt.Problem(**minimizer_kwargs)
 
         minimizer.set(**{k: v for k, v in ipopt_options.items() if v is not None})
 
         init_tol = min([math.sqrt(loss.errordef * self.tol), loss.errordef * self.tol * 1e2])
-        # init_tol **= 0.5
         internal_tol = self._internal_tol
         internal_tol = {tol: init_tol if init is None else init for tol, init in internal_tol.items()}
 
@@ -355,7 +325,6 @@ class Ipyopt(BaseMinimizer):
         for i in range(self._internal_maxiter):
             minimizer.set(**internal_tol)
 
-            # run the minimization
             try:
                 xvalues, fmin, status = minimizer.solve(xvalues)
             except MaximumIterationReached:
@@ -400,12 +369,9 @@ class Ipyopt(BaseMinimizer):
             if converged or maxiter_reached:
                 break
 
-            # Only enable warm start after first successful iteration
-            # and only if the previous iteration completed successfully
             if i == 0 and status in [0, 1]:  # 0=solved, 1=solved to acceptable level
                 minimizer.set(**dict.fromkeys(warm_start_options, "yes"))
 
-            # update the tolerances
             self._update_tol_inplace(
                 criterion_value=criterion_value, internal_tol=internal_tol
             )  # hand-tuned 0.1 factor
@@ -414,7 +380,6 @@ class Ipyopt(BaseMinimizer):
             valid = False
             valid_message = f"Invalid, criterion {criterion.name} is {criterion_value}, target {self.tol} not reached."
 
-        # cleanup of convergence
         minimizer.set(**dict.fromkeys(warm_start_options, "no"))
         assign_values(params=params, values=xvalues)
 

@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -29,29 +28,10 @@ class BaseDimensional(ZfitDimensional):
         if not hasattr(cls, "_N_OBS"):
             cls._N_OBS = None
 
-    @property
-    def obs(self) -> ztyping.ObsTypeReturn:
-        return self.space.obs
-
-    @property
-    def axes(self) -> ztyping.AxesTypeReturn:
-        return self.space.axes
-
-    @property
-    def n_obs(self) -> int:
-        return self.space.n_obs
 
 
-def get_same_obs(obs):
-    deps = [set() for _ in range(len(obs))]
-    for i, ob in enumerate(obs):
-        for j, other_ob in enumerate(obs[i + 1 :]):
-            if not set(ob).isdisjoint(other_ob):
-                deps[i].add(i)
-                deps[i].add(j + i + 1)
-                deps[j + i + 1].add(i)
 
-    return tuple(tuple(dep) for dep in deps)
+
 
 
 def limits_overlap(spaces: ztyping.SpaceOrSpacesTypeInput, allow_exact_match: bool = False) -> bool:
@@ -70,7 +50,6 @@ def limits_overlap(spaces: ztyping.SpaceOrSpacesTypeInput, allow_exact_match: bo
     Returns:
         If there are overlapping limits.
     """
-    # TODO(Mayou36): add approx comparison global in zfit
     eps = 1e-8  # epsilon for float comparisons
     spaces = convert_to_container(spaces, container=tuple)
     all_obs = common_obs(spaces=spaces)
@@ -90,7 +69,6 @@ def limits_overlap(spaces: ztyping.SpaceOrSpacesTypeInput, allow_exact_match: bo
                 for other_lower, other_upper in zip(lowers, uppers, strict=True):
                     if allow_exact_match and np.allclose(other_lower, low) and np.allclose(other_upper, up):
                         continue
-                    # TODO(Mayou36): tol? add global flags?
                     low_overlaps = np.all(other_lower - eps < low) and np.all(low < other_upper - eps)
                     up_overlaps = np.all(other_lower + eps < up) and np.all(up < other_upper + eps)
                     overlap = low_overlaps or up_overlaps

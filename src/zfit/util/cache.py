@@ -1,52 +1,4 @@
-"""Module for caching.
 
-The basic concept of caching in Zfit builds on a "cacher", that caches a certain value and that
-is dependent of "cache_dependents". By implementing `ZfitGraphCachable`, an object will be able to play both
-roles. And most importantly, it has a `_cache` dict, that contains all the cache.
-
-Basic principle
-===============
-
-A "cacher" adds any dependents that it may comes across with `add_cache_dependents`. For example,
-for a loss this would be all pdfs and data. Since :py:class:`~zfit.Space` is immutable, there is no need to add this
-as a dependent. This leads to the "cache_dependent" to register the "cacher" and to remember it.
-
-In case, any "cache_dependent" changes in a way the cache of itself (and any "cacher") is invalid,
-which is done in the simplest case by decorating a method with `@invalidates_cache`, the "cache_dependent":
-
- * clears it's own cache with `reset_cache_self` and
- * "clears" any "cacher"s cache with `reset_cache(reseter=self)`, telling the "cacher" that it should
-   reset the cache. This is also where more fine-grained control (depending on which "cache_dependent"
-   calls `reset_cache`) can be brought into play.
-
-Example with a pdf that caches the normalization:
-
-.. code:: python
-
-    class Parameter(Cachable):
-        def load(new_value):  # does not require to build a new graph
-            # do something
-
-        @invalidates_cache
-        def change_limits(new_limits):  # requires to build a new graph (as an example)
-            # do something
-
-    # create param1, param2 from `Parameter`
-
-    class MyPDF(Cachable):
-        def __init__(self, param1, param2):
-            self.add_cache_dependents([param1, param2])
-
-        def cached_func(...):
-            if self._cache.get('my_name') is None:
-                result = ...  # calculations here
-                self._cache['my_name']
-            else:
-                result = self._cache['my_name']
-            return result
-"""
-
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -117,7 +69,6 @@ class GraphCachable(ZfitGraphCachable):
             if not func_name.startswith("__"):
                 func = getattr(cls, func_name)
                 if callable(func) and hasattr(func, "zfit_graph_cache_registered"):
-                    # assert hasattr(func, "_descriptor_cache"), "TensorFlow internals have changed. Need to update cache"
                     func.zfit_graph_cache_registered = True
                     graph_caching_methods.append(func)
         cls.graph_caching_methods = graph_caching_methods
@@ -172,25 +123,6 @@ class GraphCachable(ZfitGraphCachable):
 
 
 def invalidate_graph(func):
-    @functools.wraps(func)
-    def wrapped_func(*args, **kwargs):
-        self = args[0]
-        if not isinstance(self, ZfitGraphCachable):
-            msg = "Decorator can only be used in a subclass of `ZfitGraphCachable`"
-            raise TypeError(msg)
-
-        from .. import run  # noqa: PLC0415
-
-        if not tf.inside_function():
-            run.clear_graph_cache()
-        else:
-            self.reset_cache(reseter=self)
-        # TODO: we could make the whole handling more precise and not just reset the whole graph
-        # raise RuntimeError(f"The function {func} is not supported in graph mode as it modifies pieces that invalidate"
-        #                    " the graph. If you think this should work, please open an issue on"
-        #                    " https://github.com/zfit/zfit/issues/new/choose.")
-
-        return func(*args, **kwargs)
 
     return wrapped_func
 
@@ -273,13 +205,7 @@ class FunctionCacheHolder(GraphCachable):
         self.is_valid = True  # needed to make the cache valid again
         self.deleter = deleter
 
-    # @property
-    # def wrapped_func(self):
-    #     return self._wrapped_func
 
-    @property
-    def execute_func(self):
-        return self.wrapped_func if self.do_jit else self.python_func
 
     def reset_cache_self(self):
         self.is_valid = False
@@ -294,11 +220,6 @@ class FunctionCacheHolder(GraphCachable):
 
         Returns:
         """
-        # todo: we can probably get rid of this check, this is somewhat for legacy purpose
-        # with the new parameter tf type spec, TF should take care of this
-        # is initialized before the core
-        # args = tuple(args)
-        # kwargs = list(kwargs.keys()) + list(kwargs.values())
         combined = (*args, *kwargs.keys(), *kwargs.values())
         combined_cleaned = []
         for obj in combined:
@@ -370,9 +291,6 @@ class FunctionCacheHolder(GraphCachable):
             return False
         except TypeError:  # OperatorNotAllowedError inherits from this
             return False
-        # TODO: activate the below? costly, but runs?
-        # except OperatorNotAllowedInGraphError:  # we have to assume they're not the same
-        #     return False
 
     def __repr__(self) -> str:
         return f"<FunctionCacheHolder: {self.python_func}, valid={self.is_valid}>"
@@ -405,7 +323,6 @@ def clear_graph_cache(*, call_gc=None):
         registry.reset()
     for instance in GraphCachable.instances:
         instance.reset_cache("global")
-    # Cachable.graph_caching_methods.clear()
 
     tf.compat.v1.reset_default_graph()
     if call_gc:

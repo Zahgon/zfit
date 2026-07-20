@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -25,8 +24,6 @@ if typing.TYPE_CHECKING:
 
 
 def assign_values_func(params, values):
-    # TODO(WrappedVariable): this is needed if we want to use wrapped Variables
-    # params = z.math._extract_tfparams(params)
     return assign_values_jit(params, znp.asarray(values))
 
 
@@ -116,17 +113,8 @@ class LossEval:
         self.full = full
         self.numpy_converter = False if numpy_converter is None else numpy_converter
 
-    @property
-    def niter(self):
-        return max([self.nfunc_eval, self.ngrad_eval, self.nhess_eval])
 
-    @property
-    def maxiter_reached(self):
-        return not self.ignoring_maxiter and self.niter > self.maxiter
 
-    def _check_maxiter_reached(self):
-        if self.maxiter_reached:
-            raise MaximumIterationReached
 
     @contextlib.contextmanager
     def ignore_maxiter(self):
@@ -136,36 +124,12 @@ class LossEval:
         yield
         self._ignoring_maxiter = old
 
-    @property
-    def ignoring_maxiter(self):
-        return self._ignoring_maxiter or self.maxiter is None
 
-    @property
-    def nfunc_eval(self):
-        return self._nfunc_eval
 
-    @nfunc_eval.setter
-    def nfunc_eval(self, value):
-        self._nfunc_eval = value
-        self._check_maxiter_reached()
 
-    @property
-    def ngrad_eval(self):
-        return self._ngrad_eval
 
-    @ngrad_eval.setter
-    def ngrad_eval(self, value):
-        self._ngrad_eval = value
-        self._check_maxiter_reached()
 
-    @property
-    def nhess_eval(self):
-        return self._nhess_eval
 
-    @nhess_eval.setter
-    def nhess_eval(self, value):
-        self._nhess_eval = value
-        self._check_maxiter_reached()
 
     def value_gradient(self, values: np.ndarray) -> tuple[np.float64, np.ndarray]:
         """Calculate the value and gradient like :py:meth:`~ZfitLoss.value_gradients`.
@@ -416,7 +380,6 @@ def print_params(params, values, loss=None):
         row1.append("Loss")
         row2.append(loss)
 
-    # for param, value in zip(params, values):
     table.header(row1 + ["Parameter: "] + [param.label for param in params])
     table.add_row([*row2, "value: ", *list(values)])
 

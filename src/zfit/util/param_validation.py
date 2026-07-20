@@ -1,6 +1,4 @@
-"""Parameter validation utilities to reduce code duplication."""
 
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -182,17 +180,14 @@ def validate_parameter_names(*names: str) -> None:
             msg = "Parameter name cannot be empty"
             raise ValueError(msg)
 
-        # Check for Python keywords
         if keyword.iskeyword(name):
             msg = f"Parameter name '{name}' is a Python keyword"
             raise ValueError(msg)
 
-        # Check for valid identifier
         if not name.isidentifier():
             msg = f"Parameter name '{name}' is not a valid Python identifier"
             raise ValueError(msg)
 
-        # Check for reserved zfit names (common patterns)
         reserved_patterns = ["__", "_zfit_", "zfit_"]
         if any(pattern in name for pattern in reserved_patterns):
             msg = f"Parameter name '{name}' uses reserved pattern"
@@ -227,7 +222,6 @@ def validate_stepsize(stepsize: Any, param_name: str = "parameter") -> None:
         return
 
     try:
-        # Try to convert to float to verify it's numeric
         float(stepsize)  # Just check if conversion works
     except (TypeError, ValueError) as error:
         msg = f"Stepsize for {param_name} must be convertible to float, got {type(stepsize)}"

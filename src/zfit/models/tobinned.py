@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 from __future__ import annotations
 
 import typing
@@ -102,12 +101,6 @@ class BinnedFromUnbinnedPDF(BaseBinnedFunctorPDF):
         )
         self.pdfs = self.models
 
-    # def _get_params(self, floating: bool | None = True, is_yield: bool | None = None,
-    #                 extract_independent: bool | None = True) -> set[ZfitParameter]:
-    #     params = super()._get_params(floating=floating, is_yield=is_yield, extract_independent=extract_independent)
-    #     daughter_params = self.pdfs[0].get_params(floating=floating, is_yield=is_yield,
-    #                                               extract_independent=extract_independent)
-    #     return daughter_params | params
 
     @z.function
     def _rel_counts(self, x, norm):
@@ -126,14 +119,6 @@ class BinnedFromUnbinnedPDF(BaseBinnedFunctorPDF):
         upper_flat = znp.stack(uppers_meshed_flat, axis=-1)
         options = {"type": "bins"}
 
-        @z.function
-        def integrate_one(limits, *, obs=self.obs, pdf=pdf, options=options):
-            import zfit  # noqa: PLC0415
-
-            low, up = tf.unstack(limits)
-
-            limits_space = zfit.Space(obs=obs, limits=[low, up])
-            return pdf.integrate(limits_space, norm=False, options=options)
 
         limits = znp.stack([lower_flat, upper_flat], axis=1)
         from zfit import run  # noqa: PLC0415
@@ -141,7 +126,6 @@ class BinnedFromUnbinnedPDF(BaseBinnedFunctorPDF):
         vectorized = self._use_vectorized_map or (self._use_vectorized_map is not False and pdf.has_analytic_integral)
         try:
             if run.get_graph_mode() is False:  #  we cannot use the vectorized version, as it jit compiles
-                # also, the map_fn is slower...
                 msg = "Just stearing the eager execution"
                 raise MapNotVectorized(msg)
             values = tf.vectorized_map(integrate_one, limits)[:, 0] if vectorized else tf.map_fn(integrate_one, limits)
@@ -173,24 +157,10 @@ class BinnedFromUnbinnedPDF(BaseBinnedFunctorPDF):
 
         if pdf.is_extended:
 
-            @z.function
-            def integrate_one(limits):
-                import zfit  # noqa: PLC0415
-
-                low, up = tf.unstack(limits)
-                limits_space = zfit.Space(obs=self.obs, limits=[low, up])
-                return pdf.ext_integrate(limits_space, norm=False, options=options)
 
             missing_yield = False
         else:
 
-            @z.function
-            def integrate_one(limits):
-                import zfit  # noqa: PLC0415
-
-                low, up = tf.unstack(limits)
-                limits_space = zfit.Space(obs=self.obs, limits=[low, up])
-                return pdf.integrate(limits_space, norm=False, options=options)
 
             missing_yield = True
 
@@ -200,7 +170,6 @@ class BinnedFromUnbinnedPDF(BaseBinnedFunctorPDF):
         vectorized = self._use_vectorized_map or (self._use_vectorized_map is not False and pdf.has_analytic_integral)
         try:
             if run.get_graph_mode() is False:  #  we cannot use the vectorized version, as it jit compiles
-                # also, the map_fn is slower...
                 msg = "Just stearing the eager execution"
                 raise MapNotVectorized(msg)
             values = tf.vectorized_map(integrate_one, limits)[:, 0] if vectorized else tf.map_fn(integrate_one, limits)

@@ -1,8 +1,3 @@
-#  Copyright (c) 2025 zfit
-"""Baseclass for ``Function``. Inherits from Model.
-
-TODO(Mayou36): subclassing?
-"""
 
 from __future__ import annotations
 
@@ -32,14 +27,8 @@ class BaseFuncV1(BaseModel, ZfitFunc):
         """TODO(docs): explain subclassing."""
         super().__init__(obs=obs, dtype=dtype, name=name, params=params)
 
-    def _func_to_integrate(self, x: ztyping.XType, *, params=None):
-        del params  # unused
-        return self.func(x=x)
 
-    def _func_to_sample_from(self, x):
-        return self.func(x=x)
 
-    # TODO(Mayou36): how to deal with copy properly?
     def copy(self, **override_params):
         new_params = self.params
         new_params.update(override_params)
@@ -86,15 +75,5 @@ class BaseFuncV1(BaseModel, ZfitFunc):
             raise ShapeIncompatibleError(msg) from error
 
     def as_pdf(self) -> zfit.interfaces.ZfitPDF:
-        """Create a PDF out of the function.
+        pass
 
-        Returns:
-            A PDF with the current function as the unnormalized probability.
-        """
-        from zfit.core.operations import convert_func_to_pdf  # noqa: PLC0415
-
-        return convert_func_to_pdf(func=self)
-
-    def _check_input_norm_range_default(self, norm, caller_name="", none_is_error=True):  # TODO(Mayou36): default
-        del caller_name  # unused
-        return self._check_input_norm(norm=norm, none_is_error=none_is_error)

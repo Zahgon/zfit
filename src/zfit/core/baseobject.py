@@ -1,6 +1,4 @@
-"""Baseclass for most objects appearing in zfit."""
 
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -54,7 +52,6 @@ def validate_preprocess_name(name: str) -> str:
 
     arbitrary_name_message = "To use arbitrary characters in the name, for a human readable label, use `label` instead."
 
-    # Check for underscore at the beginning (TensorFlow compatibility - strict error)
     if name and name.startswith("_"):
         msg = (
             "Name cannot start with '_' as it is incompatible with TensorFlow's name scope requirements. "
@@ -63,12 +60,10 @@ def validate_preprocess_name(name: str) -> str:
         raise InvalidNameError(msg)
 
     try:
-        # Check for empty string
         if not name:
             msg = f"Name cannot be empty, is {name}"
             raise InvalidNameError(msg)
 
-        # Check character set
 
         if not re.match(valid_name_regex, name):
             invalid_chars = [c for c in name if not re.match(r"[a-zA-Z0-9_\-\.]", c)]
@@ -77,7 +72,6 @@ def validate_preprocess_name(name: str) -> str:
                 + arbitrary_name_message
             )
 
-        # Check for names starting with problematic characters
         if name.startswith("-"):
             raise InvalidNameError(
                 "Name cannot start with '-' as it may be interpreted as a list item." + arbitrary_name_message
@@ -88,7 +82,6 @@ def validate_preprocess_name(name: str) -> str:
                 "Name cannot start with '.' as it may cause parsing ambiguity." + arbitrary_name_message
             )
 
-        # Check for YAML reserved words
 
         if name.lower() in RESERVED_NAMES:
             raise InvalidNameError(
@@ -99,7 +92,6 @@ def validate_preprocess_name(name: str) -> str:
         warning_msg = f"{e}. In the future, this will be an ERROR, change code accordingly."
         warnings.warn(warning_msg, DeprecationWarning, stacklevel=3)
 
-    # If we've passed all checks, return True
     return name
 
 
@@ -117,8 +109,7 @@ class BaseObject(ZfitObject):
 
     @property
     def name(self) -> str:
-        """The name of the object."""
-        return self._name
+        pass
 
     def copy(self, **overwrite_params) -> ZfitObject:
         deep = overwrite_params.pop("deep", False)
@@ -137,7 +128,6 @@ class BaseObject(ZfitObject):
                 if not own_element == other._repr.get(key):
                     return False
         return self is other
-        # return True  # no break occurred
 
     def __hash__(self):
         return object.__hash__(self)
@@ -190,10 +180,8 @@ class BaseParametrized(BaseObject, ZfitParametrized):
 
         self._autograd_params = autograd_params
 
-        # parameters = dict(sorted(parameters))  # to always have a consistent order
         self._params = params
         self._repr["params"] = self.params
-        # check if the object has duplicated names as parameters
 
     def _assert_params_unique(self):
         """Assert that the parameters are unique, i.e. no parameter has the same name as another one.
@@ -266,16 +254,12 @@ class BaseParametrized(BaseObject, ZfitParametrized):
         else:
             params = []
             for name, p in self.params.items():
-                # we either collect _all_ params or only the ones that do not support autograd
                 if autograd is None or (autograd is False and name not in self._autograd_params):
                     params.append(p)
 
             params = extract_filter_params(params, floating=floating, extract_independent=extract_independent)
         return params
 
-    @property
-    def params(self) -> dict[str, ZfitParameter]:
-        return self._params
 
     @contextlib.contextmanager
     def _check_set_input_params(self, params, guarantee_checked=None):
@@ -306,12 +290,6 @@ class BaseParametrized(BaseObject, ZfitParametrized):
                     msg = f"Parameters {toset_params} were not found in the parameters of {self}: {all_params}."
                     raise ValueError(msg)
 
-                # This is for converting and passing through, complicated?
-                # for param in all_params:
-                #     if param in params or param.name in params:
-                #         newpars[param] = params[param]
-                #     else:
-                #         newpars[param] = znp.asarray(param.value())
 
         return newpars
 
@@ -330,8 +308,7 @@ class BaseNumeric(
 
     @property
     def dtype(self) -> tf.DType:
-        """The dtype of the object."""
-        return self._dtype
+        pass
 
     @staticmethod
     def _filter_floating_params(params):

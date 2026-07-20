@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -44,7 +43,6 @@ class Minuit(BaseMinimizer, GraphCachable):
         criterion: ConvergenceCriterion | None = None,
         strategy: ZfitStrategy | None = None,
         name: str | None = None,
-        # legacy arguments
         use_minuit_grad: bool | None = None,
         minuit_grad=None,
         minimize_strategy=None,
@@ -126,7 +124,6 @@ class Minuit(BaseMinimizer, GraphCachable):
             ncall: deprecated, legacy.
             minimizer_options: deprecated, legacy.
         """
-        # legacy
         if isinstance(mode, float) or isinstance(tol, int):
             msg = "mode has to be int, tol a float. The API changed, make sure you use the right parameters."
             raise TypeError(msg)
@@ -139,13 +136,11 @@ class Minuit(BaseMinimizer, GraphCachable):
         use_grad_legacy = use_minuit_grad if use_minuit_grad is not None else minuit_grad
         if use_grad_legacy is not None:
             gradient = use_grad_legacy
-        # end legacy
 
         if gradient == "zfit":
             gradient = False
         gradient = True if gradient is None else gradient
 
-        # Process hessian parameter: False or 'zfit' means use zfit hessian, True or None means don't
         if hessian == "zfit":
             hessian = False
         hessian = True if hessian is None else hessian
@@ -175,13 +170,6 @@ class Minuit(BaseMinimizer, GraphCachable):
         self.minuit_grad = gradient
         self._use_zfit_hessian = not hessian
 
-    # TODO 0.7: legacy, remove `_use_tfgrad`
-    @property
-    def _use_tfgrad(self):
-        from zfit.exception import BreakingAPIChangeError  # noqa: PLC0415
-
-        msg = "This property is not available anymore. Use `gradient` instead."
-        raise BreakingAPIChangeError(msg)
 
     @minimize_supports(init=True)
     def _minimize(self, loss: ZfitLoss, params: list[Parameter], init):
@@ -197,7 +185,6 @@ class Minuit(BaseMinimizer, GraphCachable):
         message = ""
         maxiter_reached = False
         for i in range(self._internal_maxiter):
-            # perform minimization
             try:
                 minimizer = minimizer.migrad(**minimize_options)
             except MaximumIterationReached as error:
@@ -259,7 +246,6 @@ class Minuit(BaseMinimizer, GraphCachable):
     def _make_minuit(self, loss, params, init):
         evaluator = self.create_evaluator(loss, params)
 
-        # create options
         minimizer_options = self.minimizer_options.copy()
         minimize_options = {}
         precision = minimizer_options.pop("precision", None)
@@ -289,9 +275,7 @@ class Minuit(BaseMinimizer, GraphCachable):
             raise ValueError(msg)
         init_values = np.array(params)
 
-        # create Minuit compatible names
         params_name = [param.name for param in params]
-        # TODO 0.7: legacy, remove `_use_tfgrad`
         grad_func = evaluator.gradient if self._use_tfgrad_internal or not self.minuit_grad else None
         hess_func = evaluator.hessian if self._use_zfit_hessian else None
         minimizer = iminuit.Minuit(
@@ -303,7 +287,6 @@ class Minuit(BaseMinimizer, GraphCachable):
         )
         minimizer.precision = precision
         approx_stepsizes = {}
-        # get possible initial step size from previous minimizer
         if init:
             approx_stepsizes = init.hesse(params=params, method="approx", name="approx")
 
@@ -314,11 +297,9 @@ class Minuit(BaseMinimizer, GraphCachable):
                 stepsize = param.stepsize
             if stepsize is not None:
                 minimizer.errors[param.name] = stepsize
-        # set limits
         for param in params:
             if param.has_limits:
                 minimizer.limits[param.name] = (param.lower, param.upper)
-        # set options
         minimizer.errordef = loss.errordef
         minimizer.print_level = minuit_verbosity
         strategy = minimizer_setter.pop("strategy")

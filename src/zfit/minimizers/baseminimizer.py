@@ -1,4 +1,3 @@
-#  Copyright (c) 2025 zfit
 
 from __future__ import annotations
 
@@ -76,25 +75,6 @@ def minimize_supports(*, init: bool = False) -> Callable:
         else:
             init_index = keys.index(init_str)
 
-            @functools.wraps(func)
-            def new_func(*args, **kwargs):
-                self_minimizer = args[0]
-                can_handle = True
-                loss_is_arg = len(args) > init_index
-                init_result = args[init_index] if loss_is_arg else kwargs[init_str]
-
-                if isinstance(init_result, FitResult):
-                    if init == "same":
-                        if type(self_minimizer) is not type(init_result.minimizer):
-                            can_handle = False
-                    elif not init:
-                        can_handle = False
-                    else:
-                        msg = "`init` has to be True, False or 'same'"
-                        raise ValueError(msg)
-                if not can_handle:
-                    raise InitNotImplemented
-                return func(*args, **kwargs)
 
         new_func.__wrapped__ = minimize_supports
         return new_func
@@ -197,7 +177,6 @@ class BaseMinimizer(ZfitMinimizer):
         super().__init__()
         self._n_iter_per_param = 3000
 
-        # Validate and set tolerance
         if tol is None:
             tol = self._DEFAULTS["tol"]
         elif not isinstance(tol, (int, float)):
@@ -208,7 +187,6 @@ class BaseMinimizer(ZfitMinimizer):
             raise ValueError(msg)
         self.tol = float(tol)
 
-        # Validate and set verbosity
         if verbosity is None:
             verbosity = self._DEFAULTS["verbosity"]
         elif not isinstance(verbosity, int):
@@ -241,7 +219,6 @@ class BaseMinimizer(ZfitMinimizer):
         self._strategy = strategy
         self._state = None
 
-        # Validate and set maxiter
         if maxiter is None:
             maxiter = self._DEFAULTS["maxiter"]
         elif maxiter != "auto":
@@ -251,7 +228,6 @@ class BaseMinimizer(ZfitMinimizer):
             if maxiter <= 0:
                 msg = f"maxiter must be positive, got {maxiter}"
                 raise ValueError(msg)
-            # Convert float to int if it's a whole number
             if isinstance(maxiter, float):
                 if maxiter == float("inf") or maxiter > 1e15:
                     maxiter = int(1e15)  # Set a reasonable maximum
@@ -264,7 +240,6 @@ class BaseMinimizer(ZfitMinimizer):
     @classmethod
     def __init_subclass__(cls, **kwargs) -> None:
         super().__init_subclass__(**kwargs)
-        # check if subclass has decorator if required
         cls._subclass_check_support(
             methods_to_check=_Minimizer_CHECK_HAS_SUPPORT,
             wrapper_not_overwritten=_Minimizer_register_check_support,
@@ -279,7 +254,6 @@ class BaseMinimizer(ZfitMinimizer):
             if hasattr(method, "__wrapped__") and method.__wrapped__ == wrapper_not_overwritten:
                 continue  # not overwritten, fine
 
-            # here means: overwritten
             if hasattr(method, "__wrapped__"):
                 if method.__wrapped__ == minimize_supports:
                     if has_support:
@@ -303,7 +277,6 @@ class BaseMinimizer(ZfitMinimizer):
             elif not has_support:
                 continue  # not wrapped, no support, need no
 
-            # if we reach this points, somethings was implemented wrongly
             msg = f"Method {method_name} has not been correctly wrapped with @minimize_supports "
             raise MinimizerSubclassingError(msg)
 
@@ -321,7 +294,6 @@ class BaseMinimizer(ZfitMinimizer):
         Returns:
             loss, params, init:
         """
-        # TODO: cleanup logic of setting parameter values
         to_set_param_values = {}
 
         if isinstance(loss, ZfitResult):
@@ -340,9 +312,6 @@ class BaseMinimizer(ZfitMinimizer):
             elif all(isinstance(p, str) for p in params):
                 params = convert_to_parameters(params, prefer_constant=False)
 
-                # TODO: simpleloss should take dicts of name to value?!
-                # if 'name' not in params and 'value' not in params:  # keep it a dictionary
-                #     cleanedparams = {p.name: p for p in cleanedparams}
 
             else:
                 msg = (
@@ -351,7 +320,6 @@ class BaseMinimizer(ZfitMinimizer):
                 )
                 raise ValueError(msg)
 
-        # convert the function to a SimpleLoss
         if not isinstance(loss, ZfitLoss):
             from zfit.loss import SimpleLoss  # noqa: PLC0415
 
@@ -391,12 +359,9 @@ class BaseMinimizer(ZfitMinimizer):
             else:
                 params = convert_to_container(params, container=OrderedSet)
 
-            # now extract all the independent parameters
             params = list(OrderedSet.union(*(p.get_params(floating=floating) for p in params)))
 
-        # set the parameter values from the init
         if init is not None:
-            # don't set the user set
             params_to_set = OrderedSet(params).intersection(OrderedSet(init.params)) - OrderedSet(to_set_param_values)
             assign_values(params_to_set, init)
         if floating:
@@ -406,7 +371,6 @@ class BaseMinimizer(ZfitMinimizer):
             raise RuntimeError(msg)
         params = list(params)
 
-        # Check for duplicate parameter names
         param_names = [p.name for p in params]
         if len(param_names) != len(set(param_names)):
             duplicates = [name for name in param_names if param_names.count(name) > 1]
@@ -427,13 +391,7 @@ class BaseMinimizer(ZfitMinimizer):
             )
         return [param for param in params if param.floating]
 
-    @property
-    def tol(self):
-        return self._tol
 
-    @tol.setter
-    def tol(self, tol):
-        self._tol = tol
 
     def minimize(
         self,
@@ -572,7 +530,6 @@ class BaseMinimizer(ZfitMinimizer):
                 raise
         except MaximumIterationReached:
             do_recovery = True
-            # TODO (enh): implement a recovery
 
         if do_recovery:
             result = self._recover_result(prelim_result=prelim_result)
@@ -587,9 +544,6 @@ class BaseMinimizer(ZfitMinimizer):
     ) -> FitResult:
         raise MinimizeNotImplemented
 
-    @property
-    def _is_stateful(self):
-        return self._state is not None
 
     @contextmanager
     def _make_stateful(
@@ -628,7 +582,6 @@ class BaseMinimizer(ZfitMinimizer):
         """User-friendly string representation."""
         info = [f"{self.name}"]
 
-        # Add key configuration
         info.append(f"tol={self.tol}")
         return f"<{self.__class__.__name__} {', '.join(info)}>"
 
@@ -752,7 +705,6 @@ class BaseMinimizer(ZfitMinimizer):
             self._state["criterion"] = criterion
         return criterion
 
-    # TODO: implement a recovery by using a "stateful" minimization
     def _recover_result(self, prelim_result):
         warnings.warn("recovering result, yet no special functionality implemented yet.", FutureWarning, stacklevel=2)
         return prelim_result
@@ -762,10 +714,6 @@ BaseMinimizerV1 = BaseMinimizer
 
 
 class BaseStepMinimizer(BaseMinimizer):
-    """Step minimizer that uses the `_step` method to advance a single step and check if the criterion is reached.py.
-
-    In order to subclass this correctly, override `_step`.
-    """
 
     @minimize_supports()
     def _minimize(self, loss, params, init):
@@ -823,7 +771,6 @@ class BaseStepMinimizer(BaseMinimizer):
 
             last_val = cur_val
 
-        # compose fit result
         message = "Maxiter reached" if maxiter_reached else ""
 
         success = converged
@@ -854,19 +801,7 @@ class BaseStepMinimizer(BaseMinimizer):
         )
 
     def step(self, loss, params: ztyping.ParamsOrNameType = None, init: FitResult = None):
-        """Perform a single step in the minimization (if implemented).
-
-        Args:
-            params:
-
-        Returns:
-
-        Raises:
-            MinimizeStepNotImplementedError: if the `step` method is not implemented in the minimizer.
-        """
-        loss, params, init = self._check_convert_input(loss, params, init=init)
-
-        return self._step(loss, params=params, init=init)
+        pass
 
     def _step(self, loss, params, init):  # noqa: ARG002
         raise MinimizeStepNotImplemented
